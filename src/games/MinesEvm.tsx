@@ -72,14 +72,18 @@ export default function MinesEvm() {
       if (!address || !provider) throw new Error('Connect wallet')
       if (!houseAddress || !tokenAddress) throw new Error('Missing HOUSE or TOKEN address')
   const signer = await provider.getSigner()
-  await ensureAllowance(tokenAddress, address, houseAddress, initialWager, signer)
   const house = getHouseContract(houseAddress, signer)
-  // deposit initial wager amount up-front
-  const tx = await house.deposit(initialWager)
-  await tx.wait()
-  // read internal balance
-  const bal: bigint = await house.balances(address)
-  setHouseBalance(bal)
+  // Top up to exactly initialWager (don't accumulate leftovers in UI)
+  let onchainBal: bigint = 0n
+  try { onchainBal = await house.balances(address) } catch {}
+  const needed = initialWager > onchainBal ? (initialWager - onchainBal) : 0n
+  if (needed > 0n) {
+    await ensureAllowance(tokenAddress, address, houseAddress, needed, signer)
+    const tx = await house.deposit(needed)
+    await tx.wait()
+  }
+  // Always display session stake (base) in UI
+  setHouseBalance(initialWager)
   setStarted(true)
     } catch (e: any) {
       console.error('Start pre-approve failed', e)
@@ -158,25 +162,8 @@ export default function MinesEvm() {
         setStarted(false)
         setGrid(revealAllMines(grid, cellIndex, mines))
         sounds.play('explode')
-        try {
-          const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string | undefined
-          if (address && provider && houseAddress) {
-            const signer = await provider.getSigner()
-            const house = getHouseContract(houseAddress, signer)
-            const wagers = movesRef.current
-            if (wagers.length > 0) {
-              const tx = await house.settleAndWithdraw(1, wagers, seed)
-              await tx.wait()
-            }
-          }
-        } catch (e) {
-          console.error('Auto-settle on bust failed', e)
-        } finally {
-          // Clear UI and local session
-          setHouseBalance(0n)
-          movesRef.current = []
-          setSeed('0x')
-        }
+        // Offchain reset: show 0 in-house; settle happens on Finish in one tx
+        setHouseBalance(0n)
         return
       }
 
