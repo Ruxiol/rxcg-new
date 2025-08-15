@@ -27,6 +27,8 @@ export default function MinesEvm() {
   const [seed, setSeed] = React.useState<string>('0x')
   const [showFunds, setShowFunds] = React.useState(false)
   const movesRef = React.useRef<bigint[]>([])
+  const [pendingSpent, setPendingSpent] = React.useState<bigint>(0n)
+  const [busted, setBusted] = React.useState(false)
 
   const [initialWagerInput, setInitialWagerInput] = React.useState('0.01')
   const tokenDecimals = Number(import.meta.env.VITE_BEP20_TOKEN_DECIMALS ?? 18)
@@ -54,7 +56,7 @@ export default function MinesEvm() {
 
   const remainingCells = GRID_SIZE - currentLevel
   const gameFinished = remainingCells <= mines
-  const canPlay = started && confirmed && !loading && !gameFinished
+  const canPlay = started && confirmed && !loading && !gameFinished && !busted
   const { wager, bet } = levels[currentLevel] ?? {}
 
   const refreshBalance = React.useCallback(async () => {
@@ -81,6 +83,8 @@ export default function MinesEvm() {
     setLevel(0)
     setTotalGain(0n)
     movesRef.current = []
+  setPendingSpent(0n)
+  setBusted(false)
     // new random 32-byte seed for this session
     const bytes = new Uint8Array(32)
     crypto.getRandomValues(bytes)
@@ -90,7 +94,7 @@ export default function MinesEvm() {
       if (!address || !provider) throw new Error('Connect wallet')
       // Require pre-funded on-contract balance
       await refreshBalance()
-      if (houseBalance < initialWager) {
+  if (houseBalance < initialWager) {
         setShowFunds(true)
         setStarted(false)
         setConfirmed(false)
@@ -110,13 +114,15 @@ export default function MinesEvm() {
         const signer = await provider.getSigner()
         const house = getHouseContract(houseAddress, signer)
         // Batch settle on-chain in one tx using the same seed and the per-click wagers
-        const wagers = movesRef.current
+  const wagers = movesRef.current
         if (wagers.length > 0) {
           const tx1 = await house.playBatch(1, wagers, seed)
           await tx1.wait()
         }
         movesRef.current = []
         setSeed('0x')
+  setPendingSpent(0n)
+  setBusted(false)
         await refreshBalance()
       }
     } catch (e) {
@@ -134,6 +140,8 @@ export default function MinesEvm() {
     setTotalGain(0n)
     setStarted(false)
   setConfirmed(false)
+  setPendingSpent(0n)
+  setBusted(false)
   }
 
   const play = async (cellIndex: number) => {
@@ -153,15 +161,16 @@ export default function MinesEvm() {
       sounds.sounds.tick.player.loop = true
       sounds.play('tick', { })
       // Local outcome using same rule as contract batch: win if keccak(seed, player, moveIndex) % 2 == 0
-      const moveIndex = movesRef.current.length
+  const moveIndex = movesRef.current.length
       const hash = solidityPackedKeccak256(['bytes', 'address', 'uint256'], [seed, address, moveIndex])
       const win = BigInt(hash) % 2n === 0n
   movesRef.current.push(initialWager)
+  setPendingSpent((s) => s + initialWager)
 
       sounds.sounds.tick.player.stop()
 
       if (!win) {
-        setStarted(false)
+        setBusted(true)
         setGrid(revealAllMines(grid, cellIndex, mines))
         sounds.play('explode')
         return
@@ -202,7 +211,7 @@ export default function MinesEvm() {
           <div>
             <span> Mines: {mines} </span>
             {houseBalance >= 0 && (
-              <span style={{ marginLeft: 10 }}>In-house: {formatUnits(houseBalance, tokenDecimals)}</span>
+              <span style={{ marginLeft: 10 }}>In-house: {formatUnits(houseBalance - pendingSpent, tokenDecimals)}</span>
             )}
             {totalGain > 0 && (
               <span>
