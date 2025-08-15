@@ -14,7 +14,7 @@ import LeaderboardsModal from '../sections/LeaderBoard/LeaderboardsModal'
 import { PLATFORM_JACKPOT_FEE, PLATFORM_CREATOR_ADDRESS } from '../constants'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import TokenSelect from './TokenSelect'
-import { UserButton } from './UserButton'
+// Removed Solana UserButton; using EVM connect only
 import EvmUserButton from './EvmUserButton'
 import { ENABLE_LEADERBOARD } from '../constants'
 
@@ -151,10 +151,7 @@ export default function Header() {
           )}
 
           <TokenSelect />
-          {/* EVM (BSC) connect */}
           <EvmUserButton />
-          {/* Solana connect (existing) */}
-          <UserButton />
         </div>
       </StyledHeader>
     </>

@@ -6,6 +6,7 @@ import { Dropdown } from '../components/Dropdown'
 import { Modal } from '../components/Modal'
 import { POOLS } from '../constants'
 import { useUserStore } from '../hooks/useUserStore'
+import { useErc20Balance } from '../evm/EvmProvider'
 
 const StyledToken = styled.div`
   display: flex;
@@ -64,6 +65,24 @@ export default function TokenSelect() {
   const selectedToken = useCurrentToken()
   const userStore = useUserStore()
   const balance = useTokenBalance()
+
+  // EVM token from env
+  const evmTokenAddress = import.meta.env.VITE_BEP20_TOKEN_ADDRESS as string | undefined
+  const evmTokenDecimals = Number(import.meta.env.VITE_BEP20_TOKEN_DECIMALS ?? 18)
+  const evmTokenName = (import.meta.env.VITE_BEP20_TOKEN_NAME as string) || 'RXCGT'
+  const { balance: evmRawBalance } = useErc20Balance(evmTokenAddress)
+  const evmFormatted = React.useMemo(() => {
+    try {
+      if (!evmRawBalance) return '0'
+      const bn = BigInt(evmRawBalance)
+      const base = 10n ** BigInt(evmTokenDecimals)
+      const int = (bn / base).toString()
+      const frac = (bn % base).toString().padStart(evmTokenDecimals, '0').slice(0, 4)
+      return `${int}.${frac}`
+    } catch {
+      return '0'
+    }
+  }, [evmRawBalance, evmTokenDecimals])
 
   // Update the platform context with the last selected token from localStorage
   useEffect(() => {
@@ -126,14 +145,33 @@ export default function TokenSelect() {
       )}
       <div style={{ position: 'relative' }}>
         <GambaUi.Button onClick={click}>
-          {selectedToken && (
-            <StyledToken>
-              <TokenImage mint={selectedToken.mint} />
-              <TokenValue amount={balance.balance} />
-            </StyledToken>
-          )}
+          <StyledToken>
+            {/* Prefer showing EVM token in the button if configured */}
+            {evmTokenAddress ? (
+              <>
+                <StyledTokenImage src="/favicon.png" />
+                <div>{evmFormatted} {evmTokenName}</div>
+              </>
+            ) : (
+              selectedToken && (
+                <>
+                  <TokenImage mint={selectedToken.mint} />
+                  <TokenValue amount={balance.balance} />
+                </>
+              )
+            )}
+          </StyledToken>
         </GambaUi.Button>
         <Dropdown visible={visible}>
+          {/* EVM token at the top if configured */}
+          {evmTokenAddress && (
+            <StyledTokenButton onClick={() => setVisible(false)}>
+              <StyledToken>
+                <StyledTokenImage src="/favicon.png" />
+                <div>{evmFormatted} {evmTokenName}</div>
+              </StyledToken>
+            </StyledTokenButton>
+          )}
           {/* Mount balances for list items only when dropdown is visible to avoid unnecessary watchers */}
           {visible && POOLS.map((pool, i) => (
             <StyledTokenButton onClick={() => selectPool(pool)} key={i}>
