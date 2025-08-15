@@ -6,13 +6,15 @@ import { CellButton, Container, Container2, Grid, Level, Levels, StatusBar } fro
 import { generateGrid, revealAllMines, revealGold } from './Mines/utils'
 import { useEvm } from '../evm/EvmProvider'
 import { formatUnits, parseUnits } from '../components/evm/format'
+import { getHouseContract, ensureAllowance, HOUSE_ABI } from '../evm/house'
+import { Interface, toUtf8Bytes } from 'ethers'
 
 // Simple local RNG for demo; in production use verifiable randomness or on-chain logic
 function rng(seed: number) { return () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280 } }
 
 export default function MinesEvm() {
   const sounds = useSound({ tick: SOUND_TICK, win: SOUND_WIN, finish: SOUND_FINISH, step: SOUND_STEP, explode: SOUND_EXPLODE })
-  const { address } = useEvm()
+  const { address, provider } = useEvm()
 
   const [grid, setGrid] = React.useState(generateGrid(GRID_SIZE))
   const [currentLevel, setLevel] = React.useState(0)
@@ -82,24 +84,43 @@ export default function MinesEvm() {
     setLoading(true)
     setSelected(cellIndex)
     try {
-      if (!address) throw new Error('Connect wallet')
+      if (!address || !provider) throw new Error('Connect wallet')
+      const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string | undefined
+      const tokenAddress = import.meta.env.VITE_BEP20_TOKEN_ADDRESS as string | undefined
+      const wager = levels[currentLevel]?.wager ?? 0n
+      if (!houseAddress || !tokenAddress) throw new Error('Missing HOUSE or TOKEN address')
+      if (wager <= 0n) throw new Error('Invalid wager')
+
+      const signer = await provider.getSigner()
+      await ensureAllowance(tokenAddress, address, houseAddress, wager, signer)
+
+      const house = getHouseContract(houseAddress, signer)
+      const dataBytes = toUtf8Bytes(JSON.stringify({ game: 'mines', level: currentLevel, cellIndex, mines }))
+
       sounds.sounds.step.player.loop = true
       sounds.play('step', { })
       sounds.sounds.tick.player.loop = true
       sounds.play('tick', { })
 
-      // Simulate outcome deterministically using RNG; replace with on-chain flow later
-      const remaining = GRID_SIZE - currentLevel
-      const safeCount = remaining - mines
-      const chanceSafe = safeCount / remaining
-      const roll = rand()
-      const isWin = roll < chanceSafe
+      const tx = await house.play(1, wager, [], dataBytes)
+      const receipt = await tx.wait()
 
-      await new Promise(res => setTimeout(res, 600))
+      const iface = new Interface(HOUSE_ABI)
+      let payout: bigint = 0n
+      for (const log of receipt.logs) {
+        if (log.address?.toLowerCase?.() !== houseAddress.toLowerCase()) continue
+        try {
+          const parsed = iface.parseLog(log)
+          if (parsed?.name === 'GamePlayed') {
+            payout = BigInt(parsed.args[3].toString())
+            break
+          }
+        } catch {}
+      }
 
       sounds.sounds.tick.player.stop()
 
-      if (!isWin) {
+      if (payout === 0n) {
         setStarted(false)
         setGrid(revealAllMines(grid, cellIndex, mines))
         sounds.play('explode')
@@ -108,9 +129,9 @@ export default function MinesEvm() {
 
       const nextLevel = currentLevel + 1
       setLevel(nextLevel)
-      const profit = (levels[currentLevel]?.profit ?? 0n)
+      const profit = payout - wager
       setGrid(revealGold(grid, cellIndex, Number(profit)))
-      setTotalGain((levels[currentLevel]?.balance ?? 0n))
+      setTotalGain(payout)
 
       if (nextLevel < GRID_SIZE - mines) {
         sounds.play('win', { playbackRate: Math.pow(PITCH_INCREASE_FACTOR, currentLevel) })
@@ -121,8 +142,8 @@ export default function MinesEvm() {
     } finally {
       setLoading(false)
       setSelected(-1)
-      sounds.sounds.tick.player.stop()
-      sounds.sounds.step.player.stop()
+  sounds.sounds.tick.player.stop()
+  sounds.sounds.step.player.stop()
     }
   }
 
