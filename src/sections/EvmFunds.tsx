@@ -33,12 +33,13 @@ export default function EvmFunds(props: { onClose: () => void }) {
       if (amt <= 0n) throw new Error('Enter amount')
       setLoading(true)
       const signer = await provider.getSigner()
-      await ensureAllowance(tokenAddress, address, houseAddress, amt, signer)
+  await ensureAllowance(tokenAddress, address, houseAddress, amt, signer)
       const house = getHouseContract(houseAddress, signer)
       const tx = await house.deposit(amt)
       await tx.wait(2)
       setAmountIn('')
-      await refresh()
+  await refresh()
+  try { window.dispatchEvent(new CustomEvent('house-balance-updated')) } catch {}
     } catch (e: any) {
       alert(e?.message || 'Deposit failed')
     } finally {
@@ -52,7 +53,7 @@ export default function EvmFunds(props: { onClose: () => void }) {
       setLoading(true)
       const signer = await provider.getSigner()
       const house = getHouseContract(houseAddress, signer)
-      if (all) {
+  if (all) {
         const tx = await house.withdrawAll()
         await tx.wait(2)
       } else {
@@ -61,8 +62,9 @@ export default function EvmFunds(props: { onClose: () => void }) {
         const tx = await house.withdraw(amt)
         await tx.wait(2)
       }
-      setAmountOut('')
-      await refresh()
+  setAmountOut('')
+  await refresh()
+  try { window.dispatchEvent(new CustomEvent('house-balance-updated')) } catch {}
     } catch (e: any) {
       alert(e?.message || 'Withdraw failed')
     } finally {

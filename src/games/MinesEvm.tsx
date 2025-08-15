@@ -62,20 +62,34 @@ export default function MinesEvm() {
 
   const refreshBalance = React.useCallback(async () => {
     try {
-  const houseAddress = getHouseAddress()
-      if (address && provider && houseAddress) {
+      const houseAddress = getHouseAddress()
+      if (!address || !houseAddress) return
+      if (rpc) {
+        const house = getHouseContract(houseAddress, rpc)
+        const bal: bigint = await (house as any).balances(address)
+        setHouseBalance(bal)
+        return
+      }
+      if (provider) {
         const signer = await provider.getSigner()
         const house = getHouseContract(houseAddress, signer)
-        const bal: bigint = await house.balances(address)
-      const houseAddress = getHouseAddress()
+        const bal: bigint = await (house as any).balances(address)
+        setHouseBalance(bal)
       }
     } catch {}
-  }, [address, provider])
+  }, [address, provider, rpc])
 
   React.useEffect(() => {
     refreshBalance()
     const id = setInterval(refreshBalance, 12000)
     return () => clearInterval(id)
+  }, [refreshBalance])
+
+  // Refresh balance immediately when Funds modal performs a deposit/withdraw
+  React.useEffect(() => {
+    const handler = () => refreshBalance()
+    window.addEventListener('house-balance-updated', handler as any)
+    return () => window.removeEventListener('house-balance-updated', handler as any)
   }, [refreshBalance])
 
   const start = async () => {
