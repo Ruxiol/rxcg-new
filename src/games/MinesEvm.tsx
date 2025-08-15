@@ -6,8 +6,8 @@ import { CellButton, Container, Container2, Grid, Level, Levels, StatusBar } fro
 import { generateGrid, revealAllMines, revealGold } from './Mines/utils'
 import { useEvm } from '../evm/EvmProvider'
 import { formatUnits, parseUnits } from '../components/evm/format'
-import { getHouseContract, ensureAllowance, HOUSE_ABI } from '../evm/house'
-import { Interface, toUtf8Bytes } from 'ethers'
+import { getHouseContract, ensureAllowance, HOUSE_ABI, ERC20_ABI } from '../evm/house'
+import { Interface, toUtf8Bytes, Contract } from 'ethers'
 
 // Simple local RNG for demo; in production use verifiable randomness or on-chain logic
 function rng(seed: number) { return () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280 } }
@@ -91,8 +91,14 @@ export default function MinesEvm() {
       if (!houseAddress || !tokenAddress) throw new Error('Missing HOUSE or TOKEN address')
       if (wager <= 0n) throw new Error('Invalid wager')
 
-      const signer = await provider.getSigner()
-      await ensureAllowance(tokenAddress, address, houseAddress, wager, signer)
+  const signer = await provider.getSigner()
+
+  // Preflight checks: balance and allowance
+  const erc20 = new Contract(tokenAddress, ERC20_ABI, provider)
+  const bal: bigint = await erc20.balanceOf(address)
+  if (bal < wager) throw new Error(`Insufficient RXCGT balance. Have ${formatUnits(bal, tokenDecimals)} need ${formatUnits(wager, tokenDecimals)}`)
+
+  await ensureAllowance(tokenAddress, address, houseAddress, wager, signer)
 
       const house = getHouseContract(houseAddress, signer)
       const dataBytes = toUtf8Bytes(JSON.stringify({ game: 'mines', level: currentLevel, cellIndex, mines }))
@@ -102,8 +108,14 @@ export default function MinesEvm() {
       sounds.sounds.tick.player.loop = true
       sounds.play('tick', { })
 
-      const tx = await house.play(1, wager, [], dataBytes)
-      const receipt = await tx.wait()
+      let receipt
+      try {
+        const tx = await house.play(1, wager, [], dataBytes)
+        receipt = await tx.wait()
+      } catch (e: any) {
+        console.error('House.play failed', e)
+        throw new Error(e?.shortMessage || e?.reason || 'House.play reverted')
+      }
 
       const iface = new Interface(HOUSE_ABI)
       let payout: bigint = 0n

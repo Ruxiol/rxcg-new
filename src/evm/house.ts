@@ -28,6 +28,21 @@ export async function ensureAllowance(
   const erc20 = new Contract(tokenAddress, ERC20_ABI, signer)
   const current: bigint = await erc20.allowance(owner, spender)
   if (current >= amount) return
-  const tx = await erc20.approve(spender, amount)
-  await tx.wait()
+  const max = (1n << 256n) - 1n
+  try {
+    const tx = await erc20.approve(spender, max)
+    await tx.wait()
+    return
+  } catch {
+    // Some tokens (e.g., USDT) require resetting allowance to 0 first
+    try {
+      const tx0 = await erc20.approve(spender, 0)
+      await tx0.wait()
+      const tx1 = await erc20.approve(spender, max)
+      await tx1.wait()
+      return
+    } catch (e) {
+      throw e
+    }
+  }
 }
