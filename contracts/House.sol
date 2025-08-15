@@ -162,10 +162,9 @@ contract House {
     require(keccak256(userSeed) == userCommitment[msg.sender], "BAD_USER_REVEAL");
     require(keccak256(houseSeed) == sessionHouseCommit[msg.sender], "BAD_HOUSE_REVEAL");
 
-    // Clear session (prevents re-use even if revert later)
-    userCommitment[msg.sender] = bytes32(0);
-    bytes32 lockedHouseCommit = sessionHouseCommit[msg.sender];
-    sessionHouseCommit[msg.sender] = bytes32(0);
+  // Clear session (prevents re-use even if revert later)
+  userCommitment[msg.sender] = bytes32(0);
+  sessionHouseCommit[msg.sender] = bytes32(0);
 
     require(wagers.length > 0, "NO_MOVES");
     uint256 base = wagers[0];
@@ -174,13 +173,11 @@ contract House {
     // lock stake upfront
     balances[msg.sender] -= base;
 
-    // Combine seeds. We avoid using now/blocks for determinism.
-    bytes32 mix = keccak256(abi.encode(userSeed, houseSeed));
-
     uint256 wins = 0;
     for (uint256 i = 0; i < wagers.length; i++) {
       require(wagers[i] == base, "NON_UNIFORM");
-      bool win = uint256(keccak256(abi.encode(mix, msg.sender, i))) % 2 == 0;
+  // Use combined seeds directly per move to avoid extra locals
+  bool win = uint256(keccak256(abi.encode(userSeed, houseSeed, msg.sender, i))) % 2 == 0;
       if (!win) { wins = 0; break; }
       wins += 1;
     }
