@@ -15,6 +15,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
+import { EvmProvider } from './evm/EvmProvider'
 import { DEFAULT_POOL, PLATFORM_CREATOR_ADDRESS, PLATFORM_CREATOR_FEE, PLATFORM_JACKPOT_FEE, PLATFORM_REFERRAL_FEE, RPC_ENDPOINT, TOKEN_METADATA, TOKEN_METADATA_FETCHER } from './constants'
 import './styles.css'
 
@@ -31,36 +32,38 @@ function Root() {
 
   return (
     <BrowserRouter>
-      <ConnectionProvider
-        endpoint={RPC_ENDPOINT}
-        config={{ commitment: 'processed' }}
-      >
-        <WalletProvider autoConnect wallets={wallets}>
-          <WalletModalProvider>
-            <TokenMetaProvider
-              tokens={TOKEN_METADATA}
-              fetcher={TOKEN_METADATA_FETCHER}
-            >
-              <SendTransactionProvider priorityFee={400_201}>
-                <GambaProvider>
-                  <GambaPlatformProvider
-                    creator={PLATFORM_CREATOR_ADDRESS}
-                    defaultCreatorFee={PLATFORM_CREATOR_FEE}
-                    defaultJackpotFee={PLATFORM_JACKPOT_FEE}
-                    defaultPool={DEFAULT_POOL}
-                    referral={{
-                      fee: PLATFORM_REFERRAL_FEE,
-                      prefix: 'code',
-                    }}
-                  >
-                    <App />
-                  </GambaPlatformProvider>
-                </GambaProvider>
-              </SendTransactionProvider>
-            </TokenMetaProvider>
-          </WalletModalProvider>
-        </WalletProvider>
-      </ConnectionProvider>
+      <EvmProvider>
+        <ConnectionProvider
+          endpoint={RPC_ENDPOINT}
+          config={{ commitment: 'processed' }}
+        >
+          <WalletProvider autoConnect wallets={wallets}>
+            <WalletModalProvider>
+              <TokenMetaProvider
+                tokens={TOKEN_METADATA}
+                fetcher={TOKEN_METADATA_FETCHER}
+              >
+                <SendTransactionProvider priorityFee={400_201}>
+                  <GambaProvider>
+                    <GambaPlatformProvider
+                      creator={PLATFORM_CREATOR_ADDRESS}
+                      defaultCreatorFee={PLATFORM_CREATOR_FEE}
+                      defaultJackpotFee={PLATFORM_JACKPOT_FEE}
+                      defaultPool={DEFAULT_POOL}
+                      referral={{
+                        fee: PLATFORM_REFERRAL_FEE,
+                        prefix: 'code',
+                      }}
+                    >
+                      <App />
+                    </GambaPlatformProvider>
+                  </GambaProvider>
+                </SendTransactionProvider>
+              </TokenMetaProvider>
+            </WalletModalProvider>
+          </WalletProvider>
+        </ConnectionProvider>
+      </EvmProvider>
     </BrowserRouter>
   )
 }

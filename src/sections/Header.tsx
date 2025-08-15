@@ -15,6 +15,7 @@ import { PLATFORM_JACKPOT_FEE, PLATFORM_CREATOR_ADDRESS } from '../constants'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import TokenSelect from './TokenSelect'
 import { UserButton } from './UserButton'
+import EvmUserButton from './EvmUserButton'
 import { ENABLE_LEADERBOARD } from '../constants'
 
 const Bonus = styled.button`
@@ -150,6 +151,9 @@ export default function Header() {
           )}
 
           <TokenSelect />
+          {/* EVM (BSC) connect */}
+          <EvmUserButton />
+          {/* Solana connect (existing) */}
           <UserButton />
         </div>
       </StyledHeader>
