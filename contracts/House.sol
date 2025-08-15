@@ -19,6 +19,11 @@ contract House {
   IERC20 public immutable token;
   address public treasury;
   uint256 public feeBps; // e.g., 100 = 1%
+  uint256 public houseEdgeBps; // e.g., 500 = 5% edge => 95% RTP
+  // Commit-reveal: owner sets a house commit; players bind to the current commit when they commit
+  bytes32 public currentHouseCommit; // keccak256(houseSeed)
+  mapping(address => bytes32) public userCommitment; // keccak256(userSeed)
+  mapping(address => bytes32) public sessionHouseCommit; // the house commit the user is bound to
   // Per-player internal balances (deposit at Start, play many moves, withdraw on Finish)
   mapping(address => uint256) public balances;
 
@@ -30,7 +35,8 @@ contract House {
     token = IERC20(_token);
     // default: treasury is the contract itself, fee 0
     treasury = address(this);
-    feeBps = 0;
+  feeBps = 0;
+  houseEdgeBps = 500; // default 5% edge (95% RTP)
   }
 
   // --- Safe ERC20 helpers (handles non-standard tokens that return no boolean) ---
@@ -51,6 +57,17 @@ contract House {
   function setFeeBps(uint256 _feeBps) external onlyOwner { feeBps = _feeBps; }
   function setTreasury(address _treasury) external onlyOwner { require(_treasury != address(0), "ZERO"); treasury = _treasury; }
   function transferOwnership(address _owner) external onlyOwner { require(_owner != address(0), "ZERO"); owner = _owner; }
+  function setHouseEdgeBps(uint256 _bps) external onlyOwner { require(_bps <= 10_000, "BPS_TOO_HIGH"); houseEdgeBps = _bps; }
+  function setCurrentHouseCommit(bytes32 _commit) external onlyOwner { require(_commit != bytes32(0), "ZERO_COMMIT"); currentHouseCommit = _commit; }
+
+  // Players must commit to their seed before playing a session; binds the session to the active house commit.
+  function userCommit(bytes32 _userCommit) external {
+    require(_userCommit != bytes32(0), "ZERO_COMMIT");
+    require(userCommitment[msg.sender] == bytes32(0), "ACTIVE_SESSION");
+    require(currentHouseCommit != bytes32(0), "NO_HOUSE_COMMIT");
+    userCommitment[msg.sender] = _userCommit;
+    sessionHouseCommit[msg.sender] = currentHouseCommit;
+  }
 
   // Deposit RXCGT into internal balance (requires prior approve by user)
   function deposit(uint256 amount) external {
@@ -83,10 +100,11 @@ contract House {
 
     // Pseudo outcome: 50/50 double or lose. Replace per-game math in your frontend (encode in `data`) or on-chain here.
     bool win = uint256(keccak256(abi.encodePacked(block.prevrandao, msg.sender, block.timestamp))) % 2 == 0;
-    payout = win ? wager * 2 : 0;
-
-    uint256 fee = (payout * feeBps) / 10000;
-    uint256 net = payout - fee;
+  payout = win ? wager * 2 : 0;
+  // Apply house edge on payout first (scales player returns)
+  uint256 payoutAfterEdge = (payout * (10_000 - houseEdgeBps)) / 10_000;
+  uint256 fee = (payoutAfterEdge * feeBps) / 10_000;
+  uint256 net = payoutAfterEdge - fee;
 
     if (payout > 0) {
       // Credit winnings to internal balance; optionally route fee to treasury
@@ -94,7 +112,8 @@ contract House {
   if (fee > 0 && treasury != address(this)) _safeTransfer(treasury, fee);
     }
 
-    emit GamePlayed(msg.sender, gameId, wager, payout, data);
+  // Emit the payout after edge (pre-fee) for transparency
+  emit GamePlayed(msg.sender, gameId, wager, payoutAfterEdge, data);
   }
 
   // Batch version to reduce confirmations: uses a caller-provided seed for pseudo randomness per move index
@@ -121,9 +140,11 @@ contract House {
     }
 
     // If at least 1 win, payout = base * (1 + wins); else 0
-    uint256 payout = wins > 0 ? base * (1 + wins) : 0;
-    uint256 fee = (payout * feeBps) / 10000;
-    uint256 net = payout - fee;
+  uint256 payout = wins > 0 ? base * (1 + wins) : 0;
+  // Apply house edge on payout first
+  uint256 payoutAfterEdge = (payout * (10_000 - houseEdgeBps)) / 10_000;
+  uint256 fee = (payoutAfterEdge * feeBps) / 10_000;
+  uint256 net = payoutAfterEdge - fee;
     if (net > 0) {
       balances[msg.sender] += net;
     }
@@ -131,8 +152,48 @@ contract House {
       _safeTransfer(treasury, fee);
     }
 
-    emit GameBatchPlayed(msg.sender, gameId, base * wagers.length, payout, wagers.length, seed);
-    return payout;
+  emit GameBatchPlayed(msg.sender, gameId, base * wagers.length, payoutAfterEdge, wagers.length, seed);
+  return payoutAfterEdge;
+  }
+
+  // Commit-reveal version: verifies both seeds and uses mixed entropy
+  function playBatchReveal(uint256 gameId, uint256[] calldata wagers, bytes calldata userSeed, bytes calldata houseSeed) external returns (uint256) {
+    // Verify commitments
+    require(keccak256(userSeed) == userCommitment[msg.sender], "BAD_USER_REVEAL");
+    require(keccak256(houseSeed) == sessionHouseCommit[msg.sender], "BAD_HOUSE_REVEAL");
+
+    // Clear session (prevents re-use even if revert later)
+    userCommitment[msg.sender] = bytes32(0);
+    bytes32 lockedHouseCommit = sessionHouseCommit[msg.sender];
+    sessionHouseCommit[msg.sender] = bytes32(0);
+
+    require(wagers.length > 0, "NO_MOVES");
+    uint256 base = wagers[0];
+    require(base > 0, "WAGER_ZERO");
+    require(balances[msg.sender] >= base, "INSUFFICIENT_BAL");
+    // lock stake upfront
+    balances[msg.sender] -= base;
+
+    // Combine seeds. We avoid using now/blocks for determinism.
+    bytes32 mix = keccak256(abi.encode(userSeed, houseSeed));
+
+    uint256 wins = 0;
+    for (uint256 i = 0; i < wagers.length; i++) {
+      require(wagers[i] == base, "NON_UNIFORM");
+      bool win = uint256(keccak256(abi.encode(mix, msg.sender, i))) % 2 == 0;
+      if (!win) { wins = 0; break; }
+      wins += 1;
+    }
+
+    uint256 payout = wins > 0 ? base * (1 + wins) : 0;
+    uint256 payoutAfterEdge = (payout * (10_000 - houseEdgeBps)) / 10_000;
+    uint256 fee = (payoutAfterEdge * feeBps) / 10_000;
+    uint256 net = payoutAfterEdge - fee;
+    if (net > 0) { balances[msg.sender] += net; }
+    if (fee > 0 && treasury != address(this)) { _safeTransfer(treasury, fee); }
+
+    emit GameBatchPlayed(msg.sender, gameId, base * wagers.length, payoutAfterEdge, wagers.length, userSeed);
+    return payoutAfterEdge;
   }
 
   // Convenience: batch play then withdraw all remaining internal balance

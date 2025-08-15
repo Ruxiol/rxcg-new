@@ -11,6 +11,9 @@ import TokenSelect from './TokenSelect'
 // Removed Solana UserButton; using EVM connect only
 import EvmUserButton from './EvmUserButton'
 import EvmFunds from './EvmFunds'
+import AdminPanel from './AdminPanel'
+import { useEvm } from '../evm/EvmProvider'
+import { getHouseContract } from '../evm/house'
 import { ENABLE_LEADERBOARD } from '../constants'
 
 const Bonus = styled.button`
@@ -57,6 +60,21 @@ export default function Header() {
   const [bonusHelp, setBonusHelp] = React.useState(false)
   const [jackpotHelp, setJackpotHelp] = React.useState(false)
   const [showFunds, setShowFunds] = React.useState(false)
+  const [showAdmin, setShowAdmin] = React.useState(false)
+  const { address, rpc } = useEvm()
+  const [isOwner, setIsOwner] = React.useState(false)
+
+  React.useEffect(() => {
+    const run = async () => {
+      try {
+        if (!rpc || !evmEnabled) return setIsOwner(false)
+        const house = getHouseContract(import.meta.env.VITE_HOUSE_ADDRESS as string, rpc)
+        const owner = await (house as any).owner()
+        setIsOwner(Boolean(address && owner && address.toLowerCase() === String(owner).toLowerCase()))
+      } catch { setIsOwner(false) }
+    }
+    run()
+  }, [address, rpc, evmEnabled])
 
   return (
     <>
@@ -141,6 +159,11 @@ export default function Header() {
           )}
 
           <TokenSelect />
+          {evmEnabled && isOwner && (
+            <button onClick={() => setShowAdmin(true)} style={{ padding: '6px 10px', borderRadius: 6 }}>
+              Admin
+            </button>
+          )}
           {evmEnabled && (
             <button onClick={() => setShowFunds(true)} style={{ padding: '6px 10px', borderRadius: 6 }}>
               Funds
@@ -151,6 +174,9 @@ export default function Header() {
       </StyledHeader>
       {evmEnabled && showFunds && (
         <EvmFunds onClose={() => setShowFunds(false)} />
+      )}
+      {evmEnabled && showAdmin && (
+        <AdminPanel onClose={() => setShowAdmin(false)} />
       )}
     </>
   )

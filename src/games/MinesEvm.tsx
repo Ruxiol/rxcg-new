@@ -25,6 +25,7 @@ export default function MinesEvm() {
   const [confirmed, setConfirmed] = React.useState(false)
   const [houseBalance, setHouseBalance] = React.useState<bigint>(0n)
   const [seed, setSeed] = React.useState<string>('0x')
+  const [userCommit, setUserCommit] = React.useState<string>('0x')
   const [showFunds, setShowFunds] = React.useState(false)
   const movesRef = React.useRef<bigint[]>([])
   const [pendingSpent, setPendingSpent] = React.useState<bigint>(0n)
@@ -85,11 +86,11 @@ export default function MinesEvm() {
     movesRef.current = []
   setPendingSpent(0n)
   setBusted(false)
-    // new random 32-byte seed for this session
-    const bytes = new Uint8Array(32)
-    crypto.getRandomValues(bytes)
-    const hex = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
-    setSeed(hex)
+  // new random 32-byte seed for this session
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  const hex = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+  setSeed(hex)
     try {
       if (!address || !provider) throw new Error('Connect wallet')
       // Require pre-funded on-contract balance
@@ -99,6 +100,21 @@ export default function MinesEvm() {
         setStarted(false)
         setConfirmed(false)
       } else {
+        // Commit user seed to contract (binds to current house commit)
+        const signer = await provider.getSigner()
+        const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string
+        const house = getHouseContract(houseAddress, signer)
+        const commitHash = (window as any).ethers?.utils?.keccak256
+          ? (window as any).ethers.utils.keccak256(seed)
+          : (await import('ethers')).keccak256(seed as any)
+        setUserCommit(commitHash)
+        try {
+          const tx = await (house as any).userCommit(commitHash)
+          await tx.wait(1)
+        } catch (e) {
+          console.error('userCommit failed', e)
+          throw e
+        }
         setStarted(true)
         setConfirmed(true)
       }
@@ -114,9 +130,11 @@ export default function MinesEvm() {
         const signer = await provider.getSigner()
         const house = getHouseContract(houseAddress, signer)
         // Batch settle on-chain in one tx using the same seed and the per-click wagers
-  const wagers = movesRef.current
+        const wagers = movesRef.current
         if (wagers.length > 0) {
-          const tx1 = await house.playBatch(1, wagers, seed)
+          // Reveal with mixed seeds
+          const houseSeedHex = (import.meta as any).env?.VITE_HOUSE_SEED || '0x686f7573652d7365656400000000000000000000000000000000000000000000'
+          const tx1 = await (house as any).playBatchReveal(1, wagers, seed, houseSeedHex)
           await tx1.wait()
         }
         movesRef.current = []
