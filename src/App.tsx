@@ -29,20 +29,23 @@ function ScrollToTop() {
 }
 
 function ErrorHandler() {
+  const evmEnabled = Boolean(import.meta.env.VITE_BEP20_TOKEN_ADDRESS)
   const walletModal = useWalletModal()
   const toast       = useToast()
 
   // React‑state not needed; let Toasts surface details
-  useTransactionError((err) => {
-    if (err.message === 'NOT_CONNECTED') {
-      walletModal.setVisible(true)
-    } else {
-      toast({
-        title: '❌ Transaction error',
-        description: err.error?.errorMessage ?? err.message,
-      })
-    }
-  })
+  if (!evmEnabled) {
+    useTransactionError((err) => {
+      if (err.message === 'NOT_CONNECTED') {
+        walletModal.setVisible(true)
+      } else {
+        toast({
+          title: '❌ Transaction error',
+          description: err.error?.errorMessage ?? err.message,
+        })
+      }
+    })
+  }
 
   return null
 }

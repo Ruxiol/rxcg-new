@@ -26,6 +26,7 @@ function CustomError() {
 }
 
 function CustomRenderer() {
+  const evmEnabled = Boolean(import.meta.env.VITE_BEP20_TOKEN_ADDRESS)
   const { game } = GambaUi.useGame()
   const [info, setInfo] = React.useState(false)
   const [provablyFair, setProvablyFair] = React.useState(false)
@@ -52,10 +53,12 @@ function CustomRenderer() {
   }
 
   // global transaction errors
-  useTransactionError(err => {
-    if (err.message === 'NOT_CONNECTED') return
-    // you might want to show a toast here
-  })
+  if (!evmEnabled) {
+    useTransactionError(err => {
+      if (err.message === 'NOT_CONNECTED') return
+      // you might want to show a toast here
+    })
+  }
 
   return (
     <>

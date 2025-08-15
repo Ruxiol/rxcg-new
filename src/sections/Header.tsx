@@ -1,11 +1,5 @@
 // src/sections/Header.tsx
-import {
-  GambaUi,
-  TokenValue,
-  useCurrentPool,
-  useGambaPlatformContext,
-  useUserBalance,
-} from 'gamba-react-ui-v2'
+import { GambaUi, TokenValue } from 'gamba-react-ui-v2'
 import React from 'react'
 import { NavLink } from 'react-router-dom'
 import styled from 'styled-components'
@@ -56,9 +50,7 @@ const Logo = styled(NavLink)`
 `
 
 export default function Header() {
-  const pool = useCurrentPool()
-  const context = useGambaPlatformContext()
-  const balance = useUserBalance()
+  const evmEnabled = Boolean(import.meta.env.VITE_BEP20_TOKEN_ADDRESS)
   const isDesktop = useMediaQuery('lg') 
   const [showLeaderboard, setShowLeaderboard] = React.useState(false)
   const [bonusHelp, setBonusHelp] = React.useState(false)
@@ -80,11 +72,11 @@ export default function Header() {
         </Modal>
       )}
 
-      {jackpotHelp && (
+  {!evmEnabled && jackpotHelp && (
         <Modal onClose={() => setJackpotHelp(false)}>
           <h1>Jackpot 💰</h1>
           <p style={{ fontWeight: 'bold' }}>
-            There&apos;s <TokenValue amount={pool.jackpotBalance} /> in the
+    There&apos;s <TokenValue amount={0} /> in the
             Jackpot.
           </p>
           <p>
@@ -98,18 +90,16 @@ export default function Header() {
             % of each wager for a chance to win.
           </p>
           <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {context.defaultJackpotFee === 0 ? 'DISABLED' : 'ENABLED'}
+            {'ENABLED'}
             <GambaUi.Switch
-              checked={context.defaultJackpotFee > 0}
-              onChange={(checked) =>
-                context.setDefaultJackpotFee(checked ? PLATFORM_JACKPOT_FEE : 0)
-              }
+              checked={true}
+              onChange={() => {}}
             />
           </label>
         </Modal>
       )}
 
-      {ENABLE_LEADERBOARD && showLeaderboard && (
+  {!evmEnabled && ENABLE_LEADERBOARD && showLeaderboard && (
         <LeaderboardsModal
           creator={PLATFORM_CREATOR_ADDRESS.toBase58()}
           onClose={() => setShowLeaderboard(false)}
@@ -131,20 +121,20 @@ export default function Header() {
             position: 'relative',
           }}
         >
-          {pool.jackpotBalance > 0 && (
+      {!evmEnabled && (
             <Bonus onClick={() => setJackpotHelp(true)}>
-              💰 <TokenValue amount={pool.jackpotBalance} />
+        💰
             </Bonus>
           )}
 
-          {balance.bonusBalance > 0 && (
+      {!evmEnabled && (
             <Bonus onClick={() => setBonusHelp(true)}>
-              ✨ <TokenValue amount={balance.bonusBalance} />
+        ✨
             </Bonus>
           )}
 
           {/* Leaderboard shows only on desktop */}
-          {isDesktop && (
+          {!evmEnabled && isDesktop && (
             <GambaUi.Button onClick={() => setShowLeaderboard(true)}>
               Leaderboard
             </GambaUi.Button>
