@@ -33,6 +33,21 @@ contract House {
     feeBps = 0;
   }
 
+  // --- Safe ERC20 helpers (handles non-standard tokens that return no boolean) ---
+  function _safeTransfer(address to, uint256 amount) internal {
+    (bool success, bytes memory data) = address(token).call(
+      abi.encodeWithSelector(IERC20.transfer.selector, to, amount)
+    );
+    require(success && (data.length == 0 || abi.decode(data, (bool))), "TRANSFER_FAIL");
+  }
+
+  function _safeTransferFrom(address from, address to, uint256 amount) internal {
+    (bool success, bytes memory data) = address(token).call(
+      abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, amount)
+    );
+    require(success && (data.length == 0 || abi.decode(data, (bool))), "TRANSFER_FROM_FAIL");
+  }
+
   function setFeeBps(uint256 _feeBps) external onlyOwner { feeBps = _feeBps; }
   function setTreasury(address _treasury) external onlyOwner { require(_treasury != address(0), "ZERO"); treasury = _treasury; }
   function transferOwnership(address _owner) external onlyOwner { require(_owner != address(0), "ZERO"); owner = _owner; }
@@ -40,14 +55,18 @@ contract House {
   // Deposit RXCGT into internal balance (requires prior approve by user)
   function deposit(uint256 amount) external {
     require(amount > 0, "AMOUNT_ZERO");
-    require(token.transferFrom(msg.sender, address(this), amount), "TRANSFER_FROM_FAIL");
-    balances[msg.sender] += amount;
+    uint256 beforeBal = token.balanceOf(address(this));
+    _safeTransferFrom(msg.sender, address(this), amount);
+    uint256 afterBal = token.balanceOf(address(this));
+    require(afterBal > beforeBal, "NO_TOKENS");
+    uint256 received = afterBal - beforeBal;
+    balances[msg.sender] += received;
   }
 
   function withdraw(uint256 amount) public {
     require(balances[msg.sender] >= amount, "INSUFFICIENT_BAL");
     balances[msg.sender] -= amount;
-    require(token.transfer(msg.sender, amount), "WITHDRAW_FAIL");
+  _safeTransfer(msg.sender, amount);
   }
 
   function withdrawAll() external {
@@ -72,7 +91,7 @@ contract House {
     if (payout > 0) {
       // Credit winnings to internal balance; optionally route fee to treasury
       balances[msg.sender] += net;
-      if (fee > 0 && treasury != address(this)) require(token.transfer(treasury, fee), "FEE_FAIL");
+  if (fee > 0 && treasury != address(this)) _safeTransfer(treasury, fee);
     }
 
     emit GamePlayed(msg.sender, gameId, wager, payout, data);
@@ -109,7 +128,7 @@ contract House {
       balances[msg.sender] += net;
     }
     if (fee > 0 && treasury != address(this)) {
-      require(token.transfer(treasury, fee), "FEE_FAIL");
+      _safeTransfer(treasury, fee);
     }
 
     emit GameBatchPlayed(msg.sender, gameId, base * wagers.length, payout, wagers.length, seed);
@@ -122,12 +141,12 @@ contract House {
     uint256 amt = balances[msg.sender];
     if (amt > 0) {
       balances[msg.sender] = 0;
-      require(token.transfer(msg.sender, amt), "WITHDRAW_FAIL");
+  _safeTransfer(msg.sender, amt);
     }
   }
 
   // Optional: allow owner to withdraw stuck funds
   function sweep(address to, uint256 amount) external onlyOwner {
-    require(token.transfer(to, amount), "SWEEP_FAIL");
+  _safeTransfer(to, amount);
   }
 }

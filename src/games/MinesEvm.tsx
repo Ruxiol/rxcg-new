@@ -157,9 +157,26 @@ export default function MinesEvm() {
       if (!win) {
         setStarted(false)
         setGrid(revealAllMines(grid, cellIndex, mines))
-        // Optimistically reflect stake loss in UI (on-chain settle happens on Finish)
-        setHouseBalance(0n)
         sounds.play('explode')
+        try {
+          const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string | undefined
+          if (address && provider && houseAddress) {
+            const signer = await provider.getSigner()
+            const house = getHouseContract(houseAddress, signer)
+            const wagers = movesRef.current
+            if (wagers.length > 0) {
+              const tx = await house.settleAndWithdraw(1, wagers, seed)
+              await tx.wait()
+            }
+          }
+        } catch (e) {
+          console.error('Auto-settle on bust failed', e)
+        } finally {
+          // Clear UI and local session
+          setHouseBalance(0n)
+          movesRef.current = []
+          setSeed('0x')
+        }
         return
       }
 
