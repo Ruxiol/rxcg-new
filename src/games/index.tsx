@@ -69,7 +69,7 @@ export const GAMES: ExtendedGameBundle[] = [
         There's money hidden beneath the squares. The reward will increase the more squares you reveal, but watch out for the 5 hidden mines. Touch one and you'll go broke. You can cash out at any time.
       `,
     },
-    app: React.lazy(() => import('./Mines')),
+    app: React.lazy(() => import(/* @vite-ignore */ (import.meta.env.VITE_BEP20_TOKEN_ADDRESS ? './MinesEvm' : './Mines'))),
   },
   {
     id: 'roulette',
