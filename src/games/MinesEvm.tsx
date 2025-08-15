@@ -104,16 +104,15 @@ export default function MinesEvm() {
         const signer = await provider.getSigner()
   const houseAddress = getHouseAddress()
         const house = getHouseContract(houseAddress, signer)
-        // Require an active house commit on-chain
+        // Try to preflight-check currentHouseCommit; if it fails, we'll rely on userCommit revert handling
         try {
           const active = await (house as any).currentHouseCommit()
           if (!active || active === '0x' || /^0x0+$/.test(String(active))) {
-            alert('House commit is not set yet. Please ask admin to set a commit in Admin panel.')
+            alert('House commit not set yet. Ask admin to set a commit in Admin panel.')
             throw new Error('NO_HOUSE_COMMIT')
           }
         } catch (e) {
-          console.error('Failed reading currentHouseCommit', e)
-          throw e
+          console.warn('currentHouseCommit check skipped due to read error; will try userCommit directly', e)
         }
         const commitHash = (window as any).ethers?.utils?.keccak256
           ? (window as any).ethers.utils.keccak256(seed)
@@ -122,7 +121,14 @@ export default function MinesEvm() {
         try {
           const tx = await (house as any).userCommit(commitHash)
           await tx.wait(1)
-        } catch (e) {
+        } catch (e: any) {
+          const msg = String(e?.reason || e?.message || '')
+          if (msg.includes('NO_HOUSE_COMMIT')) {
+            alert('House commit is not set. Admin must set it in the Admin panel before playing.')
+            setStarted(false)
+            setConfirmed(false)
+            return
+          }
           console.error('userCommit failed', e)
           throw e
         }
