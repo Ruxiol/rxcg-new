@@ -163,8 +163,11 @@ export default function MinesEvm() {
         // Batch settle on-chain in one tx using the same seed and the per-click wagers
         const wagers = movesRef.current
         if (wagers.length > 0) {
-          // Reveal with mixed seeds
-          const houseSeedHex = (import.meta as any).env?.VITE_HOUSE_SEED || '0x686f7573652d7365656400000000000000000000000000000000000000000000'
+          // Reveal with mixed seeds. House seed must be the EXACT bytes used to compute the commit.
+          const envSeed: string | undefined = (import.meta as any).env?.VITE_HOUSE_SEED
+          const houseSeedHex = envSeed
+            ? (envSeed.startsWith('0x') ? envSeed : (await import('ethers')).hexlify((await import('ethers')).toUtf8Bytes(envSeed)))
+            : (await import('ethers')).hexlify((await import('ethers')).toUtf8Bytes('house-seed'))
           const tx1 = await (house as any).playBatchReveal(1, wagers, seed, houseSeedHex)
           await tx1.wait()
           // Clear persisted seed after successful settle
