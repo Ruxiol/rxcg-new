@@ -18,6 +18,7 @@ export function getHouseContract(address: string, signerOrProvider: Signer | Bro
 }
 
 export const ERC20_ABI = [
+  'function balanceOf(address) view returns (uint256)',
   'function approve(address spender, uint256 amount) returns (bool)',
   'function allowance(address owner, address spender) view returns (uint256)',
 ]
