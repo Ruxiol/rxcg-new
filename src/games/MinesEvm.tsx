@@ -21,6 +21,7 @@ export default function MinesEvm() {
   const [totalGain, setTotalGain] = React.useState<bigint>(0n)
   const [loading, setLoading] = React.useState(false)
   const [started, setStarted] = React.useState(false)
+  const [confirmed, setConfirmed] = React.useState(false)
   const [houseBalance, setHouseBalance] = React.useState<bigint>(0n)
   const [seed, setSeed] = React.useState<string>('0x')
   const movesRef = React.useRef<bigint[]>([])
@@ -51,7 +52,7 @@ export default function MinesEvm() {
 
   const remainingCells = GRID_SIZE - currentLevel
   const gameFinished = remainingCells <= mines
-  const canPlay = started && !loading && !gameFinished
+  const canPlay = started && confirmed && !loading && !gameFinished
   const { wager, bet } = levels[currentLevel] ?? {}
 
   const start = async () => {
@@ -73,22 +74,19 @@ export default function MinesEvm() {
       if (!houseAddress || !tokenAddress) throw new Error('Missing HOUSE or TOKEN address')
   const signer = await provider.getSigner()
   const house = getHouseContract(houseAddress, signer)
-  // Top up to exactly initialWager (don't accumulate leftovers in UI)
-  let onchainBal: bigint = 0n
-  try { onchainBal = await house.balances(address) } catch {}
-  const needed = initialWager > onchainBal ? (initialWager - onchainBal) : 0n
-  if (needed > 0n) {
-    await ensureAllowance(tokenAddress, address, houseAddress, needed, signer)
-    const tx = await house.deposit(needed)
-    await tx.wait()
-  }
-  // Always display session stake (base) in UI
+  setConfirmed(false)
+  await ensureAllowance(tokenAddress, address, houseAddress, initialWager, signer)
+  // Always require a fresh deposit and wait for 2 confirmations before play
+  const tx = await house.deposit(initialWager)
+  await tx.wait(2)
   setHouseBalance(initialWager)
   setStarted(true)
+  setConfirmed(true)
     } catch (e: any) {
       console.error('Start pre-approve failed', e)
       alert(e?.message || 'Failed to prepare game')
       setStarted(false)
+      setConfirmed(false)
     } finally {
       setLoading(false)
     }
@@ -132,6 +130,7 @@ export default function MinesEvm() {
     setLevel(0)
     setTotalGain(0n)
     setStarted(false)
+  setConfirmed(false)
   }
 
   const play = async (cellIndex: number) => {
