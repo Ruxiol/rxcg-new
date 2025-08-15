@@ -1,5 +1,5 @@
 import React from 'react'
-import { GambaUi, useSound } from 'gamba-react-ui-v2'
+import { useSound } from 'gamba-react-ui-v2'
 import { SOUND_EXPLODE, SOUND_FINISH, SOUND_STEP, SOUND_TICK, SOUND_WIN, GRID_SIZE, MINE_SELECT, PITCH_INCREASE_FACTOR } from './Mines/constants'
 import { CellButton, Container, Container2, Grid, Level, Levels, StatusBar } from './Mines/styles'
 import { generateGrid, revealAllMines, revealGold } from './Mines/utils'
@@ -207,25 +207,23 @@ export default function MinesEvm() {
             )}
           </div>
         </StatusBar>
-        <GambaUi.Responsive>
-          <Container>
-            <Grid>
-              {grid.map((cell, index) => (
-                <CellButton
-                  key={index}
-                  status={cell.status}
-                  selected={selected === index}
-                  onClick={() => play(index)}
-                  disabled={!canPlay || cell.status !== 'hidden'}
-                >
-                  {(cell.status === 'gold') && (
-                    <div>+{formatUnits(BigInt(cell.profit), tokenDecimals)}</div>
-                  )}
-                </CellButton>
-              ))}
-            </Grid>
-          </Container>
-        </GambaUi.Responsive>
+        <Container>
+          <Grid>
+            {grid.map((cell, index) => (
+              <CellButton
+                key={index}
+                status={cell.status}
+                selected={selected === index}
+                onClick={() => play(index)}
+                disabled={!canPlay || cell.status !== 'hidden'}
+              >
+                {(cell.status === 'gold') && (
+                  <div>+{formatUnits(BigInt(cell.profit), tokenDecimals)}</div>
+                )}
+              </CellButton>
+            ))}
+          </Grid>
+        </Container>
 
         <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
           {!started ? (
@@ -235,16 +233,19 @@ export default function MinesEvm() {
                 onChange={(e) => setInitialWagerInput(e.target.value)}
                 style={{ padding: '8px 10px', borderRadius: 6, background: '#111', color: '#fff', border: '1px solid #333' }}
               />
-              <GambaUi.Select
-                options={MINE_SELECT}
+              <select
                 value={mines}
-                onChange={setMines}
-                label={(mines) => (<>{mines} Mines</>)}
-              />
-              <GambaUi.PlayButton onClick={start}>Start</GambaUi.PlayButton>
+                onChange={(e) => setMines(Number(e.target.value))}
+                style={{ padding: '8px 10px', borderRadius: 6, background: '#111', color: '#fff', border: '1px solid #333' }}
+              >
+                {MINE_SELECT.map((m) => (
+                  <option key={m} value={m}>{m} Mines</option>
+                ))}
+              </select>
+              <button onClick={start} style={{ padding: '8px 12px', borderRadius: 6 }}>Start</button>
             </>
           ) : (
-            <GambaUi.Button onClick={endGame}>{totalGain > 0 ? 'Finish' : 'Reset'}</GambaUi.Button>
+            <button onClick={endGame} style={{ padding: '8px 12px', borderRadius: 6 }}>{totalGain > 0 ? 'Finish' : 'Reset'}</button>
           )}
         </div>
       </Container2>

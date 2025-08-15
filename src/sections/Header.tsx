@@ -133,9 +133,9 @@ export default function Header() {
 
           {/* Leaderboard shows only on desktop */}
           {!evmEnabled && isDesktop && (
-            <GambaUi.Button onClick={() => setShowLeaderboard(true)}>
+            <button onClick={() => setShowLeaderboard(true)} style={{ padding: '6px 10px', borderRadius: 6 }}>
               Leaderboard
-            </GambaUi.Button>
+            </button>
           )}
 
           <TokenSelect />

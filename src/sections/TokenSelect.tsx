@@ -86,12 +86,12 @@ export default function TokenSelect() {
   if (evmTokenAddress) {
     return (
       <div style={{ position: 'relative' }}>
-        <GambaUi.Button onClick={click}>
+        <button onClick={click} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}>
           <StyledToken>
             <StyledTokenImage src="/favicon.png" />
             <div>{evmFormatted} {evmTokenName}</div>
           </StyledToken>
-        </GambaUi.Button>
+        </button>
         <Dropdown visible={visible}>
           <StyledTokenButton onClick={() => setVisible(false)}>
             <StyledToken>
