@@ -34,7 +34,7 @@ contract House {
   function transferOwnership(address _owner) external onlyOwner { require(_owner != address(0), "ZERO"); owner = _owner; }
 
   // WARNING: This example uses pseudo randomness (NOT for production). Replace with VRF/commit-reveal for fairness.
-  function play(uint256 gameId, uint256 wager, uint256[] calldata bet, bytes calldata data) external returns (uint256 payout) {
+  function play(uint256 gameId, uint256 wager, uint256[] calldata /* bet */, bytes calldata data) external returns (uint256 payout) {
     require(wager > 0, "WAGER_ZERO");
     // Pull tokens
     require(token.transferFrom(msg.sender, address(this), wager), "TRANSFER_FROM_FAIL");
