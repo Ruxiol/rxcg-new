@@ -54,6 +54,19 @@ contract House {
     require(success && (data.length == 0 || abi.decode(data, (bool))), "TRANSFER_FROM_FAIL");
   }
 
+  // Apply house edge and fee to a payout, transfer fee to treasury if configured
+  function _applyEdgeAndFee(uint256 payout)
+    internal
+    returns (uint256 net, uint256 afterEdge)
+  {
+    afterEdge = (payout * (10_000 - houseEdgeBps)) / 10_000;
+    uint256 fee = (afterEdge * feeBps) / 10_000;
+    if (fee > 0 && treasury != address(this)) {
+      _safeTransfer(treasury, fee);
+    }
+    net = afterEdge - fee;
+  }
+
   function setFeeBps(uint256 _feeBps) external onlyOwner { feeBps = _feeBps; }
   function setTreasury(address _treasury) external onlyOwner { require(_treasury != address(0), "ZERO"); treasury = _treasury; }
   function transferOwnership(address _owner) external onlyOwner { require(_owner != address(0), "ZERO"); owner = _owner; }
@@ -99,17 +112,14 @@ contract House {
     balances[msg.sender] -= wager;
 
     // Pseudo outcome: 50/50 double or lose. Replace per-game math in your frontend (encode in `data`) or on-chain here.
-    bool win = uint256(keccak256(abi.encodePacked(block.prevrandao, msg.sender, block.timestamp))) % 2 == 0;
+  bool win = uint256(keccak256(abi.encodePacked(block.prevrandao, msg.sender, block.timestamp))) % 2 == 0;
   payout = win ? wager * 2 : 0;
-  // Apply house edge on payout first (scales player returns)
-  uint256 payoutAfterEdge = (payout * (10_000 - houseEdgeBps)) / 10_000;
-  uint256 fee = (payoutAfterEdge * feeBps) / 10_000;
-  uint256 net = payoutAfterEdge - fee;
+  (uint256 net, uint256 payoutAfterEdge) = _applyEdgeAndFee(payout);
 
     if (payout > 0) {
       // Credit winnings to internal balance; optionally route fee to treasury
       balances[msg.sender] += net;
-  if (fee > 0 && treasury != address(this)) _safeTransfer(treasury, fee);
+  // fee already handled in _applyEdgeAndFee
     }
 
   // Emit the payout after edge (pre-fee) for transparency
@@ -140,16 +150,9 @@ contract House {
     }
 
     // If at least 1 win, payout = base * (1 + wins); else 0
-  uint256 payout = wins > 0 ? base * (1 + wins) : 0;
-  // Apply house edge on payout first
-  uint256 payoutAfterEdge = (payout * (10_000 - houseEdgeBps)) / 10_000;
-  uint256 fee = (payoutAfterEdge * feeBps) / 10_000;
-  uint256 net = payoutAfterEdge - fee;
-    if (net > 0) {
+  (uint256 net, uint256 payoutAfterEdge) = _applyEdgeAndFee(wins > 0 ? base * (1 + wins) : 0);
+  if (net > 0) {
       balances[msg.sender] += net;
-    }
-    if (fee > 0 && treasury != address(this)) {
-      _safeTransfer(treasury, fee);
     }
 
   emit GameBatchPlayed(msg.sender, gameId, base * wagers.length, payoutAfterEdge, wagers.length, seed);
@@ -182,15 +185,10 @@ contract House {
       wins += 1;
     }
 
-    uint256 payout = wins > 0 ? base * (1 + wins) : 0;
-    uint256 payoutAfterEdge = (payout * (10_000 - houseEdgeBps)) / 10_000;
-    uint256 fee = (payoutAfterEdge * feeBps) / 10_000;
-    uint256 net = payoutAfterEdge - fee;
-    if (net > 0) { balances[msg.sender] += net; }
-    if (fee > 0 && treasury != address(this)) { _safeTransfer(treasury, fee); }
-
-    emit GameBatchPlayed(msg.sender, gameId, base * wagers.length, payoutAfterEdge, wagers.length, userSeed);
-    return payoutAfterEdge;
+  (uint256 net, uint256 afterEdge) = _applyEdgeAndFee(wins > 0 ? base * (1 + wins) : 0);
+  if (net > 0) { balances[msg.sender] += net; }
+  emit GameBatchPlayed(msg.sender, gameId, base * wagers.length, afterEdge, wagers.length, userSeed);
+  return afterEdge;
   }
 
   // Convenience: batch play then withdraw all remaining internal balance
