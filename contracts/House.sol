@@ -19,7 +19,7 @@ contract House {
   address public treasury;
   uint256 public feeBps; // e.g., 100 = 1%
   // Per-player internal balances (deposit at Start, play many moves, withdraw on Finish)
-  mapping(address => uint256> public balances;
+  mapping(address => uint256) public balances;
 
   modifier onlyOwner() { require(msg.sender == owner, "NOT_OWNER"); _; }
 
