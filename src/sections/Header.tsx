@@ -159,7 +159,7 @@ export default function Header() {
           )}
 
           <TokenSelect />
-          {evmEnabled && isOwner && (
+          {evmEnabled && (
             <button onClick={() => setShowAdmin(true)} style={{ padding: '6px 10px', borderRadius: 6 }}>
               Admin
             </button>
