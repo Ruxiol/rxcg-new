@@ -3,6 +3,8 @@ import { BrowserProvider, Contract, JsonRpcProvider, Signer } from 'ethers'
 export const HOUSE_ABI = [
   'event GamePlayed(address indexed player, uint256 indexed gameId, uint256 wager, uint256 payout, bytes data)',
   'function play(uint256 gameId, uint256 wager, uint256[] , bytes data) returns (uint256 payout)',
+  'function playBatch(uint256 gameId, uint256[] wagers, bytes seed) returns (uint256 totalPayout)',
+  'function settleAndWithdraw(uint256 gameId, uint256[] wagers, bytes seed)',
   'function deposit(uint256 amount)',
   'function withdraw(uint256 amount)',
   'function withdrawAll()',

@@ -13,6 +13,7 @@ interface IERC20 {
 
 contract House {
   event GamePlayed(address indexed player, uint256 indexed gameId, uint256 wager, uint256 payout, bytes data);
+  event GameBatchPlayed(address indexed player, uint256 indexed gameId, uint256 totalWager, uint256 totalPayout, uint256 count, bytes seed);
 
   address public owner;
   IERC20 public immutable token;
@@ -75,6 +76,50 @@ contract House {
     }
 
     emit GamePlayed(msg.sender, gameId, wager, payout, data);
+  }
+
+  // Batch version to reduce confirmations: uses a caller-provided seed for pseudo randomness per move index
+  function playBatch(uint256 gameId, uint256[] calldata wagers, bytes calldata seed) public returns (uint256 totalPayout) {
+    require(wagers.length > 0, "NO_MOVES");
+    uint256 totalWager = 0;
+    uint256 payoutAcc = 0;
+    uint256 feeAcc = 0;
+    for (uint256 i = 0; i < wagers.length; i++) {
+      uint256 w = wagers[i];
+      require(w > 0, "WAGER_ZERO");
+      require(balances[msg.sender] >= w, "INSUFFICIENT_BAL");
+      balances[msg.sender] -= w;
+      totalWager += w;
+
+      // pseudo outcome per index based on provided seed (NOT secure)
+      bool win = uint256(keccak256(abi.encode(seed, msg.sender, i))) % 2 == 0;
+      uint256 p = win ? w * 2 : 0;
+      payoutAcc += p;
+
+      if (p > 0) {
+        uint256 fee = (p * feeBps) / 10000;
+        uint256 net = p - fee;
+        balances[msg.sender] += net;
+        feeAcc += fee;
+      }
+    }
+
+    if (feeAcc > 0 && treasury != address(this)) {
+      require(token.transfer(treasury, feeAcc), "FEE_FAIL");
+    }
+
+    emit GameBatchPlayed(msg.sender, gameId, totalWager, payoutAcc, wagers.length, seed);
+    return payoutAcc;
+  }
+
+  // Convenience: batch play then withdraw all remaining internal balance
+  function settleAndWithdraw(uint256 gameId, uint256[] calldata wagers, bytes calldata seed) external {
+    playBatch(gameId, wagers, seed);
+    uint256 amt = balances[msg.sender];
+    if (amt > 0) {
+      balances[msg.sender] = 0;
+      require(token.transfer(msg.sender, amt), "WITHDRAW_FAIL");
+    }
   }
 
   // Optional: allow owner to withdraw stuck funds

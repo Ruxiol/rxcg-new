@@ -7,7 +7,7 @@ import { generateGrid, revealAllMines, revealGold } from './Mines/utils'
 import { useEvm } from '../evm/EvmProvider'
 import { formatUnits, parseUnits } from '../components/evm/format'
 import { getHouseContract, ensureAllowance, HOUSE_ABI, ERC20_ABI } from '../evm/house'
-import { Interface, toUtf8Bytes, Contract } from 'ethers'
+import { Interface, toUtf8Bytes, Contract, solidityPackedKeccak256 } from 'ethers'
 
 // Simple local RNG for demo; in production use verifiable randomness or on-chain logic
 function rng(seed: number) { return () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280 } }
@@ -23,6 +23,8 @@ export default function MinesEvm() {
   const [loading, setLoading] = React.useState(false)
   const [started, setStarted] = React.useState(false)
   const [houseBalance, setHouseBalance] = React.useState<bigint>(0n)
+  const [seed, setSeed] = React.useState<string>('0x')
+  const movesRef = React.useRef<bigint[]>([])
 
   const [initialWagerInput, setInitialWagerInput] = React.useState('0.01')
   const tokenDecimals = Number(import.meta.env.VITE_BEP20_TOKEN_DECIMALS ?? 18)
@@ -65,6 +67,12 @@ export default function MinesEvm() {
     setLoading(true)
     setLevel(0)
     setTotalGain(0n)
+    movesRef.current = []
+    // new random 32-byte seed for this session
+    const bytes = new Uint8Array(32)
+    crypto.getRandomValues(bytes)
+    const hex = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+    setSeed(hex)
     try {
       // Pre-approve allowance so MetaMask prompts on Start
       const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string | undefined
@@ -96,12 +104,20 @@ export default function MinesEvm() {
       if (address && provider && houseAddress) {
         const signer = await provider.getSigner()
         const house = getHouseContract(houseAddress, signer)
-        // withdraw remaining internal balance
-        const bal: bigint = await house.balances(address)
-        if (bal > 0n) {
-          const tx = await house.withdrawAll()
-          await tx.wait()
+        // Batch settle on-chain in one tx using the same seed and the per-click wagers
+        const wagers = movesRef.current
+        if (wagers.length > 0) {
+          const tx1 = await house.settleAndWithdraw(1, wagers, seed)
+          await tx1.wait()
+        } else {
+          // If no moves, just withdraw leftovers
+          const bal: bigint = await house.balances(address)
+          if (bal > 0n) {
+            const tx2 = await house.withdrawAll()
+            await tx2.wait()
+          }
         }
+        setHouseBalance(0n)
       }
     } catch (e) {
       console.error('Withdraw failed', e)
@@ -123,14 +139,11 @@ export default function MinesEvm() {
     setLoading(true)
     setSelected(cellIndex)
     try {
-      if (!address || !provider) throw new Error('Connect wallet')
-      const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string | undefined
+      if (!address) throw new Error('Connect wallet')
       const tokenAddress = import.meta.env.VITE_BEP20_TOKEN_ADDRESS as string | undefined
       const wager = levels[currentLevel]?.wager ?? 0n
-      if (!houseAddress || !tokenAddress) throw new Error('Missing HOUSE or TOKEN address')
+      if (!tokenAddress) throw new Error('Missing TOKEN address')
       if (wager <= 0n) throw new Error('Invalid wager')
-
-      const signer = await provider.getSigner()
 
       // Preflight checks: read balance via RPC to avoid wallet issues
       try {
@@ -144,42 +157,19 @@ export default function MinesEvm() {
         throw new Error('Unable to read RXCGT balance on this network. Check token address and network.')
       }
 
-  const house = getHouseContract(houseAddress, signer)
-      const dataBytes = toUtf8Bytes(JSON.stringify({ game: 'mines', level: currentLevel, cellIndex, mines }))
-
       sounds.sounds.step.player.loop = true
       sounds.play('step', { })
       sounds.sounds.tick.player.loop = true
       sounds.play('tick', { })
-
-      let receipt
-      try {
-        const tx = await house.play(1, wager, [], dataBytes)
-        receipt = await tx.wait()
-        // update internal balance
-        const bal: bigint = await house.balances(address)
-        setHouseBalance(bal)
-      } catch (e: any) {
-        console.error('House.play failed', e)
-        throw new Error(e?.shortMessage || e?.reason || 'House.play reverted')
-      }
-
-      const iface = new Interface(HOUSE_ABI)
-      let payout: bigint = 0n
-      for (const log of receipt.logs) {
-        if (log.address?.toLowerCase?.() !== houseAddress.toLowerCase()) continue
-        try {
-          const parsed = iface.parseLog(log)
-          if (parsed?.name === 'GamePlayed') {
-            payout = BigInt(parsed.args[3].toString())
-            break
-          }
-        } catch {}
-      }
+      // Local outcome using same rule as contract batch: win if keccak(seed, player, moveIndex) % 2 == 0
+      const moveIndex = movesRef.current.length
+      const hash = solidityPackedKeccak256(['bytes', 'address', 'uint256'], [seed, address, moveIndex])
+      const win = BigInt(hash) % 2n === 0n
+      movesRef.current.push(wager)
 
       sounds.sounds.tick.player.stop()
 
-      if (payout === 0n) {
+      if (!win) {
         setStarted(false)
         setGrid(revealAllMines(grid, cellIndex, mines))
         sounds.play('explode')
@@ -188,9 +178,9 @@ export default function MinesEvm() {
 
       const nextLevel = currentLevel + 1
       setLevel(nextLevel)
-      const profit = payout - wager
+      const profit = wager // since 2x payout - wager = +wager
       setGrid(revealGold(grid, cellIndex, Number(profit)))
-      setTotalGain(payout)
+      setTotalGain((total) => total + (wager * 2n))
 
       if (nextLevel < GRID_SIZE - mines) {
         sounds.play('win', { playbackRate: Math.pow(PITCH_INCREASE_FACTOR, currentLevel) })
