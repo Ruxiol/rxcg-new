@@ -5,7 +5,7 @@ import { CellButton, Container, Container2, Grid, Level, Levels, StatusBar } fro
 import { generateGrid, revealAllMines, revealGold } from './Mines/utils'
 import { useEvm } from '../evm/EvmProvider'
 import { formatUnits, parseUnits } from '../components/evm/format'
-import { getHouseContract } from '../evm/house'
+import { getHouseContract, getHouseAddress } from '../evm/house'
 import { solidityPackedKeccak256 } from 'ethers'
 import EvmFunds from '../sections/EvmFunds'
 
@@ -62,7 +62,7 @@ export default function MinesEvm() {
 
   const refreshBalance = React.useCallback(async () => {
     try {
-      const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string | undefined
+  const houseAddress = getHouseAddress()
       if (address && provider && houseAddress) {
         const signer = await provider.getSigner()
         const house = getHouseContract(houseAddress, signer)
@@ -102,8 +102,19 @@ export default function MinesEvm() {
       } else {
         // Commit user seed to contract (binds to current house commit)
         const signer = await provider.getSigner()
-        const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string
+  const houseAddress = getHouseAddress()
         const house = getHouseContract(houseAddress, signer)
+        // Require an active house commit on-chain
+        try {
+          const active = await (house as any).currentHouseCommit()
+          if (!active || active === '0x' || /^0x0+$/.test(String(active))) {
+            alert('House commit is not set yet. Please ask admin to set a commit in Admin panel.')
+            throw new Error('NO_HOUSE_COMMIT')
+          }
+        } catch (e) {
+          console.error('Failed reading currentHouseCommit', e)
+          throw e
+        }
         const commitHash = (window as any).ethers?.utils?.keccak256
           ? (window as any).ethers.utils.keccak256(seed)
           : (await import('ethers')).keccak256(seed as any)
@@ -125,7 +136,7 @@ export default function MinesEvm() {
 
   const endGame = async () => {
     try {
-      const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string | undefined
+  const houseAddress = getHouseAddress()
       if (address && provider && houseAddress) {
         const signer = await provider.getSigner()
         const house = getHouseContract(houseAddress, signer)

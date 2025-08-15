@@ -68,7 +68,7 @@ export default function Header() {
     const run = async () => {
       try {
         if (!rpc || !evmEnabled) return setIsOwner(false)
-        const house = getHouseContract(import.meta.env.VITE_HOUSE_ADDRESS as string, rpc)
+  const house = getHouseContract(getHouseAddress(), rpc)
         const owner = await (house as any).owner()
         setIsOwner(Boolean(address && owner && address.toLowerCase() === String(owner).toLowerCase()))
       } catch { setIsOwner(false) }

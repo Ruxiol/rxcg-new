@@ -1,7 +1,7 @@
 import React from 'react'
 import { Modal } from '../components/Modal'
 import { useEvm } from '../evm/EvmProvider'
-import { getHouseContract, ensureAllowance } from '../evm/house'
+import { getHouseContract, ensureAllowance, getHouseAddress } from '../evm/house'
 import { formatUnits, parseUnits } from '../components/evm/format'
 
 export default function EvmFunds(props: { onClose: () => void }) {
@@ -11,7 +11,7 @@ export default function EvmFunds(props: { onClose: () => void }) {
   const [amountIn, setAmountIn] = React.useState('')
   const [amountOut, setAmountOut] = React.useState('')
   const tokenDecimals = Number(import.meta.env.VITE_BEP20_TOKEN_DECIMALS ?? 18)
-  const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string | undefined
+  const houseAddress = getHouseAddress()
   const tokenAddress = import.meta.env.VITE_BEP20_TOKEN_ADDRESS as string | undefined
 
   const refresh = React.useCallback(async () => {

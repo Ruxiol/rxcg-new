@@ -1,12 +1,12 @@
 import React from 'react'
 import { Modal } from '../components/Modal'
 import { useEvm } from '../evm/EvmProvider'
-import { getHouseContract } from '../evm/house'
+import { getHouseContract, getHouseAddress } from '../evm/house'
 import { keccak256, toUtf8Bytes, isHexString, hexlify } from 'ethers'
 
 export default function AdminPanel(props: { onClose: () => void }) {
   const { address, provider, rpc } = useEvm()
-  const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string | undefined
+  const houseAddress = getHouseAddress()
   const [loading, setLoading] = React.useState(false)
   const [owner, setOwner] = React.useState<string>('')
   const [feeBps, setFeeBps] = React.useState<number>(0)
@@ -90,7 +90,7 @@ export default function AdminPanel(props: { onClose: () => void }) {
         <div>Owner: {owner || '-'}</div>
         <div>feeBps: {feeBps}</div>
         <div>houseEdgeBps (RTP): {edgeBps} ({((10000 - edgeBps)/100).toFixed(2)}%)</div>
-        <div>currentHouseCommit: {currentCommit}</div>
+  <div>currentHouseCommit: {currentCommit} {(!currentCommit || currentCommit === '0x') && <span style={{color:'#ff8080'}}>(not set)</span>}</div>
       </div>
 
       <div style={{ borderTop: '1px solid #333', paddingTop: 12, marginTop: 12 }}>

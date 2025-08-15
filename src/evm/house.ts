@@ -9,6 +9,7 @@ export const HOUSE_ABI = [
   'function userCommit(bytes32 _userCommit)',
   'function deposit(uint256 amount)',
   'function withdraw(uint256 amount)',
+    'function currentHouseCommit() view returns (bytes32)',
   'function withdrawAll()',
   'function balances(address) view returns (uint256)',
   'function setFeeBps(uint256 _feeBps)',
@@ -26,6 +27,12 @@ export const HOUSE_ABI = [
 
 export function getHouseContract(address: string, signerOrProvider: Signer | BrowserProvider | JsonRpcProvider) {
   return new Contract(address, HOUSE_ABI, signerOrProvider as any)
+}
+
+// Central resolver for House address with fallback to provided new deployment
+export function getHouseAddress(): string {
+  const envAddr = (import.meta as any).env?.VITE_HOUSE_ADDRESS as string | undefined
+  return envAddr && envAddr !== '' ? envAddr : '0x211b512689b45dcc4a109c45d6bb1e0ff8f0a877'
 }
 
 export const ERC20_ABI = [
