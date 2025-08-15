@@ -127,6 +127,29 @@ export default function TokenSelect() {
     setVisible(!visible)
   }
 
+  // If EVM token is configured, show only RXCGT entry
+  if (evmTokenAddress) {
+    return (
+      <div style={{ position: 'relative' }}>
+        <GambaUi.Button onClick={click}>
+          <StyledToken>
+            <StyledTokenImage src="/favicon.png" />
+            <div>{evmFormatted} {evmTokenName}</div>
+          </StyledToken>
+        </GambaUi.Button>
+        <Dropdown visible={visible}>
+          <StyledTokenButton onClick={() => setVisible(false)}>
+            <StyledToken>
+              <StyledTokenImage src="/favicon.png" />
+              <div>{evmFormatted} {evmTokenName}</div>
+            </StyledToken>
+          </StyledTokenButton>
+        </Dropdown>
+      </div>
+    )
+  }
+
+  // Fallback to Solana list (legacy)
   return (
     <>
       {warning && (
@@ -145,34 +168,14 @@ export default function TokenSelect() {
       )}
       <div style={{ position: 'relative' }}>
         <GambaUi.Button onClick={click}>
-          <StyledToken>
-            {/* Prefer showing EVM token in the button if configured */}
-            {evmTokenAddress ? (
-              <>
-                <StyledTokenImage src="/favicon.png" />
-                <div>{evmFormatted} {evmTokenName}</div>
-              </>
-            ) : (
-              selectedToken && (
-                <>
-                  <TokenImage mint={selectedToken.mint} />
-                  <TokenValue amount={balance.balance} />
-                </>
-              )
-            )}
-          </StyledToken>
+          {selectedToken && (
+            <StyledToken>
+              <TokenImage mint={selectedToken.mint} />
+              <TokenValue amount={balance.balance} />
+            </StyledToken>
+          )}
         </GambaUi.Button>
         <Dropdown visible={visible}>
-          {/* EVM token at the top if configured */}
-          {evmTokenAddress && (
-            <StyledTokenButton onClick={() => setVisible(false)}>
-              <StyledToken>
-                <StyledTokenImage src="/favicon.png" />
-                <div>{evmFormatted} {evmTokenName}</div>
-              </StyledToken>
-            </StyledTokenButton>
-          )}
-          {/* Mount balances for list items only when dropdown is visible to avoid unnecessary watchers */}
           {visible && POOLS.map((pool, i) => (
             <StyledTokenButton onClick={() => selectPool(pool)} key={i}>
               <TokenSelectItem mint={pool.token} />
