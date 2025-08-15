@@ -81,35 +81,37 @@ contract House {
   // Batch version to reduce confirmations: uses a caller-provided seed for pseudo randomness per move index
   function playBatch(uint256 gameId, uint256[] calldata wagers, bytes calldata seed) public returns (uint256 totalPayout) {
     require(wagers.length > 0, "NO_MOVES");
-    uint256 totalWager = 0;
-    uint256 payoutAcc = 0;
-    uint256 feeAcc = 0;
+    // Expect a constant base wager per move
+    uint256 base = wagers[0];
+    require(base > 0, "WAGER_ZERO");
+    // Require player has at least base deposited (locked as stake)
+    require(balances[msg.sender] >= base, "INSUFFICIENT_BAL");
+
+    uint256 wins = 0;
     for (uint256 i = 0; i < wagers.length; i++) {
-      uint256 w = wagers[i];
-      require(w > 0, "WAGER_ZERO");
-      require(balances[msg.sender] >= w, "INSUFFICIENT_BAL");
-      balances[msg.sender] -= w;
-      totalWager += w;
-
-      // pseudo outcome per index based on provided seed (NOT secure)
+      require(wagers[i] == base, "NON_UNIFORM");
       bool win = uint256(keccak256(abi.encode(seed, msg.sender, i))) % 2 == 0;
-      uint256 p = win ? w * 2 : 0;
-      payoutAcc += p;
-
-      if (p > 0) {
-        uint256 fee = (p * feeBps) / 10000;
-        uint256 net = p - fee;
-        balances[msg.sender] += net;
-        feeAcc += fee;
+      if (!win) {
+        // lost at move i: payout is zero; stake stays with the house (already deposited)
+        wins = 0;
+        break;
       }
+      wins += 1;
     }
 
-    if (feeAcc > 0 && treasury != address(this)) {
-      require(token.transfer(treasury, feeAcc), "FEE_FAIL");
+    // If at least 1 win, payout = base * (1 + wins); else 0
+    uint256 payout = wins > 0 ? base * (1 + wins) : 0;
+    uint256 fee = (payout * feeBps) / 10000;
+    uint256 net = payout - fee;
+    if (net > 0) {
+      balances[msg.sender] += net;
+    }
+    if (fee > 0 && treasury != address(this)) {
+      require(token.transfer(treasury, fee), "FEE_FAIL");
     }
 
-    emit GameBatchPlayed(msg.sender, gameId, totalWager, payoutAcc, wagers.length, seed);
-    return payoutAcc;
+    emit GameBatchPlayed(msg.sender, gameId, base * wagers.length, payout, wagers.length, seed);
+    return payout;
   }
 
   // Convenience: batch play then withdraw all remaining internal balance

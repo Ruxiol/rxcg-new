@@ -117,7 +117,10 @@ export default function MinesEvm() {
             await tx2.wait()
           }
         }
-        setHouseBalance(0n)
+  // Immediately zero local in-house balance to avoid stale display
+  setHouseBalance(0n)
+  movesRef.current = []
+  setSeed('0x')
       }
     } catch (e) {
       console.error('Withdraw failed', e)
