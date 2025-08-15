@@ -107,7 +107,7 @@ export const Level = styled.div<{$active: boolean}>`
   `}
 `
 
-export const CellButton = styled.button<{status: CellStatus, selected: boolean}>`
+export const CellButton = styled.button<{$status: CellStatus, $selected: boolean}>`
   display: flex;
   position: relative;
   align-items: center;
@@ -124,26 +124,26 @@ export const CellButton = styled.button<{status: CellStatus, selected: boolean}>
   font-size: 12px;
   cursor: pointer;
 
-  ${(props) => props.selected && css`
+  ${(props) => props.$selected && css`
     animation: ${tickingAnimation} .5s ease infinite;
     z-index: 10;
     opacity: 1!important;
   `}
 
-  ${(props) => props.status === 'gold' && css`
+  ${(props) => props.$status === 'gold' && css`
     color: white;
     animation: ${goldReveal} .5s ease;
     opacity: 1;
   `}
 
-  ${(props) => props.status === 'mine' && css`
+  ${(props) => props.$status === 'mine' && css`
     background: #ff5252;
     z-index: 10;
     animation: ${mineReveal} .3s ease;
     opacity: 1;
   `}
 
-  ${(props) => props.status === 'hidden' && css`
+  ${(props) => props.$status === 'hidden' && css`
     &:disabled {
       opacity: .5;
     }

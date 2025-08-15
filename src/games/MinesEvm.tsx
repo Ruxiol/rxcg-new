@@ -6,7 +6,7 @@ import { generateGrid, revealAllMines, revealGold } from './Mines/utils'
 import { useEvm } from '../evm/EvmProvider'
 import { formatUnits, parseUnits } from '../components/evm/format'
 import { getHouseContract, getHouseAddress } from '../evm/house'
-import { solidityPackedKeccak256 } from 'ethers'
+import { solidityPackedKeccak256, keccak256 } from 'ethers'
 import EvmFunds from '../sections/EvmFunds'
 
 // Simple local RNG for demo; in production use verifiable randomness or on-chain logic
@@ -84,25 +84,24 @@ export default function MinesEvm() {
     setLevel(0)
     setTotalGain(0n)
     movesRef.current = []
-  setPendingSpent(0n)
-  setBusted(false)
-  // new random 32-byte seed for this session
-  const bytes = new Uint8Array(32)
-  crypto.getRandomValues(bytes)
-  const hex = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
-  setSeed(hex)
+    setPendingSpent(0n)
+    setBusted(false)
+    // generate a candidate user seed, but only persist it after successful commit
+    const bytes = new Uint8Array(32)
+    crypto.getRandomValues(bytes)
+    const seedCandidate = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
     try {
       if (!address || !provider) throw new Error('Connect wallet')
       // Require pre-funded on-contract balance
       await refreshBalance()
-  if (houseBalance < initialWager) {
+      if (houseBalance < initialWager) {
         setShowFunds(true)
         setStarted(false)
         setConfirmed(false)
       } else {
         // Commit user seed to contract (binds to current house commit)
         const signer = await provider.getSigner()
-  const houseAddress = getHouseAddress()
+        const houseAddress = getHouseAddress()
         const house = getHouseContract(houseAddress, signer)
         // Try to preflight-check currentHouseCommit; if it fails, we'll rely on userCommit revert handling
         try {
@@ -114,13 +113,15 @@ export default function MinesEvm() {
         } catch (e) {
           console.warn('currentHouseCommit check skipped due to read error; will try userCommit directly', e)
         }
-        const commitHash = (window as any).ethers?.utils?.keccak256
-          ? (window as any).ethers.utils.keccak256(seed)
-          : (await import('ethers')).keccak256(seed as any)
-        setUserCommit(commitHash)
+        const commitHash = keccak256(seedCandidate as any)
         try {
           const tx = await (house as any).userCommit(commitHash)
           await tx.wait(1)
+          // Persist committed seed per user so reveal matches even after reloads
+          const key = address ? `mines-commit-seed:${address.toLowerCase()}` : undefined
+          if (key) localStorage.setItem(key, seedCandidate)
+          setSeed(seedCandidate)
+          setUserCommit(commitHash)
         } catch (e: any) {
           const msg = String(e?.reason || e?.message || '')
           if (msg.includes('NO_HOUSE_COMMIT')) {
@@ -128,6 +129,19 @@ export default function MinesEvm() {
             setStarted(false)
             setConfirmed(false)
             return
+          }
+          if (msg.includes('ACTIVE_SESSION')) {
+            // Reuse previously saved seed to continue the active session
+            const key = address ? `mines-commit-seed:${address.toLowerCase()}` : undefined
+            const saved = key ? localStorage.getItem(key) : null
+            if (saved && saved.startsWith('0x')) {
+              setSeed(saved)
+              setStarted(true)
+              setConfirmed(true)
+              return
+            } else {
+              alert('A previous session is already active, but no seed is saved locally. Please finish the round from the device where it was started, or ask admin to reset.')
+            }
           }
           console.error('userCommit failed', e)
           throw e
@@ -142,7 +156,7 @@ export default function MinesEvm() {
 
   const endGame = async () => {
     try {
-  const houseAddress = getHouseAddress()
+      const houseAddress = getHouseAddress()
       if (address && provider && houseAddress) {
         const signer = await provider.getSigner()
         const house = getHouseContract(houseAddress, signer)
@@ -153,11 +167,14 @@ export default function MinesEvm() {
           const houseSeedHex = (import.meta as any).env?.VITE_HOUSE_SEED || '0x686f7573652d7365656400000000000000000000000000000000000000000000'
           const tx1 = await (house as any).playBatchReveal(1, wagers, seed, houseSeedHex)
           await tx1.wait()
+          // Clear persisted seed after successful settle
+          const key = address ? `mines-commit-seed:${address.toLowerCase()}` : undefined
+          if (key) localStorage.removeItem(key)
         }
         movesRef.current = []
         setSeed('0x')
-  setPendingSpent(0n)
-  setBusted(false)
+        setPendingSpent(0n)
+        setBusted(false)
         await refreshBalance()
       }
     } catch (e) {
@@ -260,8 +277,8 @@ export default function MinesEvm() {
             {grid.map((cell, index) => (
               <CellButton
                 key={index}
-                status={cell.status}
-                selected={selected === index}
+                $status={cell.status}
+                $selected={selected === index}
                 onClick={() => play(index)}
                 disabled={!canPlay || cell.status !== 'hidden'}
               >
