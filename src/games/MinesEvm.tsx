@@ -67,7 +67,7 @@ export default function MinesEvm() {
         const signer = await provider.getSigner()
         const house = getHouseContract(houseAddress, signer)
         const bal: bigint = await house.balances(address)
-        setHouseBalance(bal)
+      const houseAddress = getHouseAddress()
       }
     } catch {}
   }, [address, provider])
@@ -115,6 +115,11 @@ export default function MinesEvm() {
         }
         const commitHash = keccak256(seedCandidate as any)
         try {
+          // Save the active commit so we can verify the reveal seed matches it later
+          try {
+            const commitKey = address ? `mines-session-house-commit:${address.toLowerCase()}` : undefined
+            if (commitKey) localStorage.setItem(commitKey, String(active))
+          } catch {}
           const tx = await (house as any).userCommit(commitHash)
           await tx.wait(1)
           // Persist committed seed per user so reveal matches even after reloads
