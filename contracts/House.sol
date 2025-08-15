@@ -21,12 +21,13 @@ contract House {
 
   modifier onlyOwner() { require(msg.sender == owner, "NOT_OWNER"); _; }
 
-  constructor(address _token, address _treasury, uint256 _feeBps) {
-    require(_token != address(0) && _treasury != address(0), "ZERO_ADDR");
+  constructor(address _token) {
+    require(_token != address(0), "ZERO_ADDR");
     owner = msg.sender;
     token = IERC20(_token);
-    treasury = _treasury;
-    feeBps = _feeBps; // caution: max ~1000 (10%) rec.
+    // default: treasury is the contract itself, fee 0
+    treasury = address(this);
+    feeBps = 0;
   }
 
   function setFeeBps(uint256 _feeBps) external onlyOwner { feeBps = _feeBps; }
@@ -48,7 +49,8 @@ contract House {
 
     if (payout > 0) {
       require(token.transfer(msg.sender, net), "PAYOUT_FAIL");
-      if (fee > 0) require(token.transfer(treasury, fee), "FEE_FAIL");
+      // If treasury is the contract itself, skip self-transfer
+      if (fee > 0 && treasury != address(this)) require(token.transfer(treasury, fee), "FEE_FAIL");
     }
 
     emit GamePlayed(msg.sender, gameId, wager, payout, data);
