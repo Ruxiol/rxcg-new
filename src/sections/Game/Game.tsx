@@ -25,9 +25,13 @@ function CustomError() {
   )
 }
 
-function CustomRenderer() {
+function CustomRenderer({ meta }: { meta?: { name: string; image: string; description?: string } }) {
   const evmEnabled = Boolean(import.meta.env.VITE_BEP20_TOKEN_ADDRESS)
-  const { game } = GambaUi.useGame()
+  // Avoid calling Gamba hooks in EVM mode
+  const game = evmEnabled ? {
+    id: 'evm-game',
+    meta: meta ?? { name: 'Game', image: '/logo.svg', description: '' },
+  } as any : GambaUi.useGame().game
   const [info, setInfo] = React.useState(false)
   const [provablyFair, setProvablyFair] = React.useState(false)
   const soundStore = useSoundStore()
@@ -108,7 +112,19 @@ export default function Game() {
   return (
     <>
       {game ? (
-        <GambaUi.Game game={game} errorFallback={<CustomError />} children={<CustomRenderer />} />
+        Boolean(import.meta.env.VITE_BEP20_TOKEN_ADDRESS)
+          ? (
+            <>
+              <CustomRenderer meta={{ name: game.meta.name, image: game.meta.image, description: game.meta.description }} />
+              <React.Suspense fallback={null}>
+                {/* Mount the selected game app directly (e.g., MinesEvm) */}
+                {React.createElement(game.app)}
+              </React.Suspense>
+            </>
+          )
+          : (
+            <GambaUi.Game game={game} errorFallback={<CustomError />} children={<CustomRenderer />} />
+          )
       ) : (
         <h1>Game not found! 👎</h1>
       )}

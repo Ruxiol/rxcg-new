@@ -30,14 +30,14 @@ function ScrollToTop() {
 
 function ErrorHandler() {
   const evmEnabled = Boolean(import.meta.env.VITE_BEP20_TOKEN_ADDRESS)
-  const walletModal = useWalletModal()
+  const walletModal = !evmEnabled ? useWalletModal() : undefined
   const toast       = useToast()
 
   // React‑state not needed; let Toasts surface details
   if (!evmEnabled) {
-    useTransactionError((err) => {
+  useTransactionError((err) => {
       if (err.message === 'NOT_CONNECTED') {
-        walletModal.setVisible(true)
+    walletModal?.setVisible(true)
       } else {
         toast({
           title: '❌ Transaction error',
@@ -88,8 +88,12 @@ export default function App() {
           <Route path="/:gameId"   element={<Game />} />
         </Routes>
 
-        <h2 style={{ textAlign: 'center' }}>Recent Plays</h2>
-        <RecentPlays />
+        {!Boolean(import.meta.env.VITE_BEP20_TOKEN_ADDRESS) && (
+          <>
+            <h2 style={{ textAlign: 'center' }}>Recent Plays</h2>
+            <RecentPlays />
+          </>
+        )}
       </MainWrapper>
 
       {ENABLE_TROLLBOX && <TrollBox />}

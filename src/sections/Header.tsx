@@ -62,9 +62,7 @@ export default function Header() {
         <Modal onClose={() => setBonusHelp(false)}>
           <h1>Bonus ✨</h1>
           <p>
-            You have <b>
-              <TokenValue amount={balance.bonusBalance} />
-            </b>{' '}
+            You have <b>bonus plays</b>{' '}
             worth of free plays. This bonus will be applied automatically when you
             play.
           </p>

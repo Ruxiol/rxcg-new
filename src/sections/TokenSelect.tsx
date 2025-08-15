@@ -61,10 +61,6 @@ export default function TokenSelect() {
   const [warning, setWarning] = React.useState(false)
   // Allow real plays override via query param/localStorage for deployed testing
   const [allowRealPlays, setAllowRealPlays] = React.useState(false)
-  const context = React.useContext(GambaPlatformContext)
-  const selectedToken = useCurrentToken()
-  const userStore = useUserStore()
-  const balance = useTokenBalance()
 
   // EVM token from env
   const evmTokenAddress = import.meta.env.VITE_BEP20_TOKEN_ADDRESS as string | undefined
@@ -83,6 +79,36 @@ export default function TokenSelect() {
       return '0'
     }
   }, [evmRawBalance, evmTokenDecimals])
+
+  const click = () => setVisible(!visible)
+
+  // If EVM token is configured, show only RXCGT entry and avoid any Solana/Gamba hooks
+  if (evmTokenAddress) {
+    return (
+      <div style={{ position: 'relative' }}>
+        <GambaUi.Button onClick={click}>
+          <StyledToken>
+            <StyledTokenImage src="/favicon.png" />
+            <div>{evmFormatted} {evmTokenName}</div>
+          </StyledToken>
+        </GambaUi.Button>
+        <Dropdown visible={visible}>
+          <StyledTokenButton onClick={() => setVisible(false)}>
+            <StyledToken>
+              <StyledTokenImage src="/favicon.png" />
+              <div>{evmFormatted} {evmTokenName}</div>
+            </StyledToken>
+          </StyledTokenButton>
+        </Dropdown>
+      </div>
+    )
+  }
+
+  // ---------- Solana/Gamba mode below ----------
+  const context = React.useContext(GambaPlatformContext)
+  const selectedToken = useCurrentToken()
+  const userStore = useUserStore()
+  const balance = useTokenBalance()
 
   // Update the platform context with the last selected token from localStorage
   useEffect(() => {
@@ -121,32 +147,6 @@ export default function TokenSelect() {
         authority: pool.authority?.toString(),
       },
     })
-  }
-
-  const click = () => {
-    setVisible(!visible)
-  }
-
-  // If EVM token is configured, show only RXCGT entry
-  if (evmTokenAddress) {
-    return (
-      <div style={{ position: 'relative' }}>
-        <GambaUi.Button onClick={click}>
-          <StyledToken>
-            <StyledTokenImage src="/favicon.png" />
-            <div>{evmFormatted} {evmTokenName}</div>
-          </StyledToken>
-        </GambaUi.Button>
-        <Dropdown visible={visible}>
-          <StyledTokenButton onClick={() => setVisible(false)}>
-            <StyledToken>
-              <StyledTokenImage src="/favicon.png" />
-              <div>{evmFormatted} {evmTokenName}</div>
-            </StyledToken>
-          </StyledTokenButton>
-        </Dropdown>
-      </div>
-    )
   }
 
   // Fallback to Solana list (legacy)
