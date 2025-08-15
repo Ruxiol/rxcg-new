@@ -21,6 +21,8 @@ const Wrapper = styled.div`
 `
 
 export default function FeaturedInlineGame() {
+  const evmEnabled = Boolean(import.meta.env.VITE_BEP20_TOKEN_ADDRESS)
+  if (evmEnabled) return null
   if (!FEATURED_GAME_INLINE || !FEATURED_GAME_ID) return null
   const game = GAMES.find((g) => g.id === FEATURED_GAME_ID)
   if (!game) return null

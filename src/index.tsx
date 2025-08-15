@@ -27,7 +27,7 @@ function Root() {
     [],
   )
 
-  const evmEnabled = Boolean(import.meta.env.VITE_BEP20_TOKEN_ADDRESS)
+  const evmEnabled = Boolean(import.meta.env.VITE_BEP20_TOKEN_ADDRESS) || (typeof window !== 'undefined' && Boolean((window as any).ethereum))
 
   return (
     <BrowserRouter>

@@ -26,7 +26,7 @@ function CustomError() {
 }
 
 function CustomRenderer({ meta }: { meta?: { name: string; image: string; description?: string } }) {
-  const evmEnabled = Boolean(import.meta.env.VITE_BEP20_TOKEN_ADDRESS)
+  const evmEnabled = Boolean(import.meta.env.VITE_BEP20_TOKEN_ADDRESS) || (typeof window !== 'undefined' && Boolean((window as any).ethereum))
   // Avoid calling Gamba hooks in EVM mode
   const game = evmEnabled ? {
     id: 'evm-game',
@@ -39,7 +39,7 @@ function CustomRenderer({ meta }: { meta?: { name: string; image: string; descri
   const markGameAsPlayed = useUserStore(s => () => s.markGameAsPlayed(game.id, true))
   const [ready, setReady] = React.useState(false)
   const [txModal, setTxModal] = React.useState(false)
-  const loading = useLoadingState()
+  const loading = evmEnabled ? ['none','none','none'] as Array<'none'|'loading'|'finished'> : useLoadingState()
 
   React.useEffect(() => {
     const t = setTimeout(() => setReady(true), 750)
@@ -81,8 +81,8 @@ function CustomRenderer({ meta }: { meta?: { name: string; image: string; descri
       <Container>
         <Screen>
           <Splash><img height="150" src={game.meta.image} /></Splash>
-          <GambaUi.PortalTarget target="error" />
-          {ready && <GambaUi.PortalTarget target="screen" />}
+          {!evmEnabled && <GambaUi.PortalTarget target="error" />}
+          {!evmEnabled && ready && <GambaUi.PortalTarget target="screen" />}
 
           <MetaControls>
             <IconButton onClick={() => setInfo(true)}><Icon.Info /></IconButton>
@@ -93,12 +93,12 @@ function CustomRenderer({ meta }: { meta?: { name: string; image: string; descri
           </MetaControls>
         </Screen>
 
-        <LoadingBar />
+  {!evmEnabled && <LoadingBar />}
 
         {/* ← No inner wrapper—controls & play buttons are centered by Controls */}
         <Controls>
-          <GambaUi.PortalTarget target="controls" />
-          <GambaUi.PortalTarget target="play" />
+          {!evmEnabled && <GambaUi.PortalTarget target="controls" />}
+          {!evmEnabled && <GambaUi.PortalTarget target="play" />}
         </Controls>
       </Container>
     </>

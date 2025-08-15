@@ -1,7 +1,6 @@
 import React from 'react'
-import { GambaUi } from 'gamba-react-ui-v2'
+import { GambaUi, useSound } from 'gamba-react-ui-v2'
 import { SOUND_EXPLODE, SOUND_FINISH, SOUND_STEP, SOUND_TICK, SOUND_WIN, GRID_SIZE, MINE_SELECT, PITCH_INCREASE_FACTOR } from './Mines/constants'
-import { useSound } from 'gamba-react-ui-v2'
 import { CellButton, Container, Container2, Grid, Level, Levels, StatusBar } from './Mines/styles'
 import { generateGrid, revealAllMines, revealGold } from './Mines/utils'
 import { useEvm } from '../evm/EvmProvider'
@@ -185,71 +184,70 @@ export default function MinesEvm() {
   }
 
   return (
-    <>
-      <GambaUi.Portal target="screen">
-        <Container2>
-          <Levels>
-            {levels.map(({ cumProfit }, i) => (
-              <Level key={i} $active={currentLevel === i}>
-                <div>LEVEL {i + 1}</div>
-                <div>{formatUnits(cumProfit, tokenDecimals)}</div>
-              </Level>
-            ))}
-          </Levels>
-          <StatusBar>
-            <div>
-              <span> Mines: {mines} </span>
-              {houseBalance >= 0 && (
-                <span style={{ marginLeft: 10 }}>In-house: {formatUnits(houseBalance, tokenDecimals)}</span>
-              )}
-              {totalGain > 0 && (
-                <span>
-                  +{formatUnits(totalGain, tokenDecimals)}
-                </span>
-              )}
-            </div>
-          </StatusBar>
-          <GambaUi.Responsive>
-            <Container>
-              <Grid>
-                {grid.map((cell, index) => (
-                  <CellButton
-                    key={index}
-                    status={cell.status}
-                    selected={selected === index}
-                    onClick={() => play(index)}
-                    disabled={!canPlay || cell.status !== 'hidden'}
-                  >
-                    {(cell.status === 'gold') && (
-                      <div>+{formatUnits(BigInt(cell.profit), tokenDecimals)}</div>
-                    )}
-                  </CellButton>
-                ))}
-              </Grid>
-            </Container>
-          </GambaUi.Responsive>
-        </Container2>
-      </GambaUi.Portal>
-      <GambaUi.Portal target="controls">
-        {!started ? (
-          <>
-            <input
-              value={initialWagerInput}
-              onChange={(e) => setInitialWagerInput(e.target.value)}
-              style={{ padding: '8px 10px', borderRadius: 6, background: '#111', color: '#fff', border: '1px solid #333' }}
-            />
-            <GambaUi.Select
-              options={MINE_SELECT}
-              value={mines}
-              onChange={setMines}
-              label={(mines) => (<>{mines} Mines</>)}
-            />
-            <GambaUi.PlayButton onClick={start}>Start</GambaUi.PlayButton>
-          </>
-        ) : (
-          <GambaUi.Button onClick={endGame}>{totalGain > 0 ? 'Finish' : 'Reset'}</GambaUi.Button>
-        )}
-      </GambaUi.Portal>
-    </>
+    <div style={{ padding: 16 }}>
+      <Container2>
+        <Levels>
+          {levels.map(({ cumProfit }, i) => (
+            <Level key={i} $active={currentLevel === i}>
+              <div>LEVEL {i + 1}</div>
+              <div>{formatUnits(cumProfit, tokenDecimals)}</div>
+            </Level>
+          ))}
+        </Levels>
+        <StatusBar>
+          <div>
+            <span> Mines: {mines} </span>
+            {houseBalance >= 0 && (
+              <span style={{ marginLeft: 10 }}>In-house: {formatUnits(houseBalance, tokenDecimals)}</span>
+            )}
+            {totalGain > 0 && (
+              <span>
+                +{formatUnits(totalGain, tokenDecimals)}
+              </span>
+            )}
+          </div>
+        </StatusBar>
+        <GambaUi.Responsive>
+          <Container>
+            <Grid>
+              {grid.map((cell, index) => (
+                <CellButton
+                  key={index}
+                  status={cell.status}
+                  selected={selected === index}
+                  onClick={() => play(index)}
+                  disabled={!canPlay || cell.status !== 'hidden'}
+                >
+                  {(cell.status === 'gold') && (
+                    <div>+{formatUnits(BigInt(cell.profit), tokenDecimals)}</div>
+                  )}
+                </CellButton>
+              ))}
+            </Grid>
+          </Container>
+        </GambaUi.Responsive>
+
+        <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+          {!started ? (
+            <>
+              <input
+                value={initialWagerInput}
+                onChange={(e) => setInitialWagerInput(e.target.value)}
+                style={{ padding: '8px 10px', borderRadius: 6, background: '#111', color: '#fff', border: '1px solid #333' }}
+              />
+              <GambaUi.Select
+                options={MINE_SELECT}
+                value={mines}
+                onChange={setMines}
+                label={(mines) => (<>{mines} Mines</>)}
+              />
+              <GambaUi.PlayButton onClick={start}>Start</GambaUi.PlayButton>
+            </>
+          ) : (
+            <GambaUi.Button onClick={endGame}>{totalGain > 0 ? 'Finish' : 'Reset'}</GambaUi.Button>
+          )}
+        </div>
+      </Container2>
+    </div>
   )
 }
