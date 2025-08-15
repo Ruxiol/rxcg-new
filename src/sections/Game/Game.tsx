@@ -25,7 +25,7 @@ function CustomError() {
   )
 }
 
-function CustomRenderer({ meta }: { meta?: { name: string; image: string; description?: string } }) {
+function CustomRenderer({ meta, children }: { meta?: { name: string; image: string; description?: string }, children?: React.ReactNode }) {
   const evmEnabled = Boolean(import.meta.env.VITE_BEP20_TOKEN_ADDRESS) || (typeof window !== 'undefined' && Boolean((window as any).ethereum))
   // Avoid calling Gamba hooks in EVM mode
   const game = evmEnabled ? {
@@ -83,6 +83,13 @@ function CustomRenderer({ meta }: { meta?: { name: string; image: string; descri
           <Splash><img height="150" src={game.meta.image} /></Splash>
           {!evmEnabled && <GambaUi.PortalTarget target="error" />}
           {!evmEnabled && ready && <GambaUi.PortalTarget target="screen" />}
+          {evmEnabled && (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: '100%' }}>
+                {children}
+              </div>
+            </div>
+          )}
 
           <MetaControls>
             <IconButton onClick={() => setInfo(true)}><Icon.Info /></IconButton>
@@ -114,13 +121,11 @@ export default function Game() {
       {game ? (
         Boolean(import.meta.env.VITE_BEP20_TOKEN_ADDRESS)
           ? (
-            <>
-              <CustomRenderer meta={{ name: game.meta.name, image: game.meta.image, description: game.meta.description }} />
+            <CustomRenderer meta={{ name: game.meta.name, image: game.meta.image, description: game.meta.description }}>
               <React.Suspense fallback={null}>
-                {/* Mount the selected game app directly (e.g., MinesEvm) */}
                 {React.createElement(game.app)}
               </React.Suspense>
-            </>
+            </CustomRenderer>
           )
           : (
             <GambaUi.Game game={game} errorFallback={<CustomError />} children={<CustomRenderer />} />
