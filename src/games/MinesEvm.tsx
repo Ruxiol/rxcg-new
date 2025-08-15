@@ -41,19 +41,12 @@ export default function MinesEvm() {
 
   const levels = React.useMemo(() => {
     const totalLevels = GRID_SIZE - mines
-    let previousBalance = initialWager
     let cumProfit = 0n
-
     return Array.from({ length: totalLevels }).map((_, level) => {
-      const wager = level === 0 ? previousBalance : previousBalance
-      const multiplier = getMultiplierForLevel(level)
-      const remainingCells = GRID_SIZE - level
-      const bet = Array.from({ length: remainingCells }, (_, i) => i < mines ? 0 : multiplier)
-      const profit = BigInt(Math.floor(Number(wager) * (multiplier - 1)))
-      const balance = wager + profit
-      previousBalance = balance
+      const wager = initialWager // constant per move
+      const profit = initialWager // each successful pick yields +wager net (2x payout minus wager)
       cumProfit += profit
-      return { wager, profit, cumProfit, bet, balance }
+      return { wager, profit, cumProfit, bet: [], balance: 0n }
     })
   }, [initialWager, mines])
 
@@ -148,17 +141,7 @@ export default function MinesEvm() {
       if (!tokenAddress) throw new Error('Missing TOKEN address')
       if (wager <= 0n) throw new Error('Invalid wager')
 
-      // Preflight checks: read balance via RPC to avoid wallet issues
-      try {
-        const erc20 = new Contract(tokenAddress, ERC20_ABI, rpc)
-        const bal: bigint = await erc20.balanceOf(address)
-        if (bal < wager) {
-          throw new Error(`Insufficient RXCGT balance. Have ${formatUnits(bal, tokenDecimals)} need ${formatUnits(wager, tokenDecimals)}`)
-        }
-      } catch (err) {
-        console.error('ERC20 balanceOf failed', err)
-        throw new Error('Unable to read RXCGT balance on this network. Check token address and network.')
-      }
+  // No per-click wallet balance checks; funds are already deposited to the House
 
       sounds.sounds.step.player.loop = true
       sounds.play('step', { })
@@ -168,13 +151,15 @@ export default function MinesEvm() {
       const moveIndex = movesRef.current.length
       const hash = solidityPackedKeccak256(['bytes', 'address', 'uint256'], [seed, address, moveIndex])
       const win = BigInt(hash) % 2n === 0n
-      movesRef.current.push(wager)
+  movesRef.current.push(initialWager)
 
       sounds.sounds.tick.player.stop()
 
       if (!win) {
         setStarted(false)
         setGrid(revealAllMines(grid, cellIndex, mines))
+        // Optimistically reflect stake loss in UI (on-chain settle happens on Finish)
+        setHouseBalance(0n)
         sounds.play('explode')
         return
       }

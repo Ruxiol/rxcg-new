@@ -84,8 +84,10 @@ contract House {
     // Expect a constant base wager per move
     uint256 base = wagers[0];
     require(base > 0, "WAGER_ZERO");
-    // Require player has at least base deposited (locked as stake)
-    require(balances[msg.sender] >= base, "INSUFFICIENT_BAL");
+  // Require player has at least base deposited (locked as stake)
+  require(balances[msg.sender] >= base, "INSUFFICIENT_BAL");
+  // lock stake upfront
+  balances[msg.sender] -= base;
 
     uint256 wins = 0;
     for (uint256 i = 0; i < wagers.length; i++) {
