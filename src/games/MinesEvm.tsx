@@ -5,8 +5,9 @@ import { CellButton, Container, Container2, Grid, Level, Levels, StatusBar } fro
 import { generateGrid, revealAllMines, revealGold } from './Mines/utils'
 import { useEvm } from '../evm/EvmProvider'
 import { formatUnits, parseUnits } from '../components/evm/format'
-import { getHouseContract, ensureAllowance, HOUSE_ABI, ERC20_ABI } from '../evm/house'
-import { Interface, toUtf8Bytes, Contract, solidityPackedKeccak256 } from 'ethers'
+import { getHouseContract } from '../evm/house'
+import { solidityPackedKeccak256 } from 'ethers'
+import EvmFunds from '../sections/EvmFunds'
 
 // Simple local RNG for demo; in production use verifiable randomness or on-chain logic
 function rng(seed: number) { return () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280 } }
@@ -24,6 +25,7 @@ export default function MinesEvm() {
   const [confirmed, setConfirmed] = React.useState(false)
   const [houseBalance, setHouseBalance] = React.useState<bigint>(0n)
   const [seed, setSeed] = React.useState<string>('0x')
+  const [showFunds, setShowFunds] = React.useState(false)
   const movesRef = React.useRef<bigint[]>([])
 
   const [initialWagerInput, setInitialWagerInput] = React.useState('0.01')
@@ -55,6 +57,24 @@ export default function MinesEvm() {
   const canPlay = started && confirmed && !loading && !gameFinished
   const { wager, bet } = levels[currentLevel] ?? {}
 
+  const refreshBalance = React.useCallback(async () => {
+    try {
+      const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string | undefined
+      if (address && provider && houseAddress) {
+        const signer = await provider.getSigner()
+        const house = getHouseContract(houseAddress, signer)
+        const bal: bigint = await house.balances(address)
+        setHouseBalance(bal)
+      }
+    } catch {}
+  }, [address, provider])
+
+  React.useEffect(() => {
+    refreshBalance()
+    const id = setInterval(refreshBalance, 12000)
+    return () => clearInterval(id)
+  }, [refreshBalance])
+
   const start = async () => {
     setGrid(generateGrid(GRID_SIZE))
     setLoading(true)
@@ -67,26 +87,17 @@ export default function MinesEvm() {
     const hex = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
     setSeed(hex)
     try {
-      // Pre-approve allowance so MetaMask prompts on Start
-      const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string | undefined
-      const tokenAddress = import.meta.env.VITE_BEP20_TOKEN_ADDRESS as string | undefined
       if (!address || !provider) throw new Error('Connect wallet')
-      if (!houseAddress || !tokenAddress) throw new Error('Missing HOUSE or TOKEN address')
-  const signer = await provider.getSigner()
-  const house = getHouseContract(houseAddress, signer)
-  setConfirmed(false)
-  await ensureAllowance(tokenAddress, address, houseAddress, initialWager, signer)
-  // Always require a fresh deposit and wait for 2 confirmations before play
-  const tx = await house.deposit(initialWager)
-  await tx.wait(2)
-  setHouseBalance(initialWager)
-  setStarted(true)
-  setConfirmed(true)
-    } catch (e: any) {
-      console.error('Start pre-approve failed', e)
-      alert(e?.message || 'Failed to prepare game')
-      setStarted(false)
-      setConfirmed(false)
+      // Require pre-funded on-contract balance
+      await refreshBalance()
+      if (houseBalance < initialWager) {
+        setShowFunds(true)
+        setStarted(false)
+        setConfirmed(false)
+      } else {
+        setStarted(true)
+        setConfirmed(true)
+      }
     } finally {
       setLoading(false)
     }
@@ -101,20 +112,12 @@ export default function MinesEvm() {
         // Batch settle on-chain in one tx using the same seed and the per-click wagers
         const wagers = movesRef.current
         if (wagers.length > 0) {
-          const tx1 = await house.settleAndWithdraw(1, wagers, seed)
+          const tx1 = await house.playBatch(1, wagers, seed)
           await tx1.wait()
-        } else {
-          // If no moves, just withdraw leftovers
-          const bal: bigint = await house.balances(address)
-          if (bal > 0n) {
-            const tx2 = await house.withdrawAll()
-            await tx2.wait()
-          }
         }
-  // Immediately zero local in-house balance to avoid stale display
-  setHouseBalance(0n)
-  movesRef.current = []
-  setSeed('0x')
+        movesRef.current = []
+        setSeed('0x')
+        await refreshBalance()
       }
     } catch (e) {
       console.error('Withdraw failed', e)
@@ -161,8 +164,6 @@ export default function MinesEvm() {
         setStarted(false)
         setGrid(revealAllMines(grid, cellIndex, mines))
         sounds.play('explode')
-        // Offchain reset: show 0 in-house; settle happens on Finish in one tx
-        setHouseBalance(0n)
         return
       }
 
@@ -246,11 +247,15 @@ export default function MinesEvm() {
                 ))}
               </select>
               <button onClick={start} style={{ padding: '8px 12px', borderRadius: 6 }}>Start</button>
+              <button onClick={() => setShowFunds(true)} style={{ padding: '8px 12px', borderRadius: 6 }}>Add funds</button>
             </>
           ) : (
-            <button onClick={endGame} style={{ padding: '8px 12px', borderRadius: 6 }}>{totalGain > 0 ? 'Finish' : 'Reset'}</button>
+            <button onClick={endGame} style={{ padding: '8px 12px', borderRadius: 6 }}>{movesRef.current.length > 0 ? 'Settle' : 'End'}</button>
           )}
         </div>
+      {showFunds && (
+        <EvmFunds onClose={() => { setShowFunds(false); refreshBalance() }} />
+      )}
       </Container2>
     </div>
   )

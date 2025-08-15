@@ -10,6 +10,7 @@ import { useMediaQuery } from '../hooks/useMediaQuery'
 import TokenSelect from './TokenSelect'
 // Removed Solana UserButton; using EVM connect only
 import EvmUserButton from './EvmUserButton'
+import EvmFunds from './EvmFunds'
 import { ENABLE_LEADERBOARD } from '../constants'
 
 const Bonus = styled.button`
@@ -55,6 +56,7 @@ export default function Header() {
   const [showLeaderboard, setShowLeaderboard] = React.useState(false)
   const [bonusHelp, setBonusHelp] = React.useState(false)
   const [jackpotHelp, setJackpotHelp] = React.useState(false)
+  const [showFunds, setShowFunds] = React.useState(false)
 
   return (
     <>
@@ -139,9 +141,17 @@ export default function Header() {
           )}
 
           <TokenSelect />
+          {evmEnabled && (
+            <button onClick={() => setShowFunds(true)} style={{ padding: '6px 10px', borderRadius: 6 }}>
+              Funds
+            </button>
+          )}
           <EvmUserButton />
         </div>
       </StyledHeader>
+      {evmEnabled && showFunds && (
+        <EvmFunds onClose={() => setShowFunds(false)} />
+      )}
     </>
   )
 }
