@@ -14,7 +14,7 @@ function rng(seed: number) { return () => { seed = (seed * 9301 + 49297) % 23328
 
 export default function MinesEvm() {
   const sounds = useSound({ tick: SOUND_TICK, win: SOUND_WIN, finish: SOUND_FINISH, step: SOUND_STEP, explode: SOUND_EXPLODE })
-  const { address, provider } = useEvm()
+  const { address, provider, rpc } = useEvm()
 
   const [grid, setGrid] = React.useState(generateGrid(GRID_SIZE))
   const [currentLevel, setLevel] = React.useState(0)
@@ -22,6 +22,7 @@ export default function MinesEvm() {
   const [totalGain, setTotalGain] = React.useState<bigint>(0n)
   const [loading, setLoading] = React.useState(false)
   const [started, setStarted] = React.useState(false)
+  const [houseBalance, setHouseBalance] = React.useState<bigint>(0n)
 
   const [initialWagerInput, setInitialWagerInput] = React.useState('0.01')
   const tokenDecimals = Number(import.meta.env.VITE_BEP20_TOKEN_DECIMALS ?? 18)
@@ -59,17 +60,55 @@ export default function MinesEvm() {
   const canPlay = started && !loading && !gameFinished
   const { wager, bet } = levels[currentLevel] ?? {}
 
-  const start = () => {
+  const start = async () => {
     setGrid(generateGrid(GRID_SIZE))
-    setLoading(false)
+    setLoading(true)
     setLevel(0)
     setTotalGain(0n)
-    setStarted(true)
+    try {
+      // Pre-approve allowance so MetaMask prompts on Start
+      const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string | undefined
+      const tokenAddress = import.meta.env.VITE_BEP20_TOKEN_ADDRESS as string | undefined
+      if (!address || !provider) throw new Error('Connect wallet')
+      if (!houseAddress || !tokenAddress) throw new Error('Missing HOUSE or TOKEN address')
+  const signer = await provider.getSigner()
+  await ensureAllowance(tokenAddress, address, houseAddress, initialWager, signer)
+  const house = getHouseContract(houseAddress, signer)
+  // deposit initial wager amount up-front
+  const tx = await house.deposit(initialWager)
+  await tx.wait()
+  // read internal balance
+  const bal: bigint = await house.balances(address)
+  setHouseBalance(bal)
+  setStarted(true)
+    } catch (e: any) {
+      console.error('Start pre-approve failed', e)
+      alert(e?.message || 'Failed to prepare game')
+      setStarted(false)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const endGame = async () => {
-    sounds.play('finish')
-    reset()
+    try {
+      const houseAddress = import.meta.env.VITE_HOUSE_ADDRESS as string | undefined
+      if (address && provider && houseAddress) {
+        const signer = await provider.getSigner()
+        const house = getHouseContract(houseAddress, signer)
+        // withdraw remaining internal balance
+        const bal: bigint = await house.balances(address)
+        if (bal > 0n) {
+          const tx = await house.withdrawAll()
+          await tx.wait()
+        }
+      }
+    } catch (e) {
+      console.error('Withdraw failed', e)
+    } finally {
+      sounds.play('finish')
+      reset()
+    }
   }
 
   const reset = () => {
@@ -91,16 +130,21 @@ export default function MinesEvm() {
       if (!houseAddress || !tokenAddress) throw new Error('Missing HOUSE or TOKEN address')
       if (wager <= 0n) throw new Error('Invalid wager')
 
-  const signer = await provider.getSigner()
+      const signer = await provider.getSigner()
 
-  // Preflight checks: balance and allowance
-  const erc20 = new Contract(tokenAddress, ERC20_ABI, provider)
-  const bal: bigint = await erc20.balanceOf(address)
-  if (bal < wager) throw new Error(`Insufficient RXCGT balance. Have ${formatUnits(bal, tokenDecimals)} need ${formatUnits(wager, tokenDecimals)}`)
+      // Preflight checks: read balance via RPC to avoid wallet issues
+      try {
+        const erc20 = new Contract(tokenAddress, ERC20_ABI, rpc)
+        const bal: bigint = await erc20.balanceOf(address)
+        if (bal < wager) {
+          throw new Error(`Insufficient RXCGT balance. Have ${formatUnits(bal, tokenDecimals)} need ${formatUnits(wager, tokenDecimals)}`)
+        }
+      } catch (err) {
+        console.error('ERC20 balanceOf failed', err)
+        throw new Error('Unable to read RXCGT balance on this network. Check token address and network.')
+      }
 
-  await ensureAllowance(tokenAddress, address, houseAddress, wager, signer)
-
-      const house = getHouseContract(houseAddress, signer)
+  const house = getHouseContract(houseAddress, signer)
       const dataBytes = toUtf8Bytes(JSON.stringify({ game: 'mines', level: currentLevel, cellIndex, mines }))
 
       sounds.sounds.step.player.loop = true
@@ -112,6 +156,9 @@ export default function MinesEvm() {
       try {
         const tx = await house.play(1, wager, [], dataBytes)
         receipt = await tx.wait()
+        // update internal balance
+        const bal: bigint = await house.balances(address)
+        setHouseBalance(bal)
       } catch (e: any) {
         console.error('House.play failed', e)
         throw new Error(e?.shortMessage || e?.reason || 'House.play reverted')
@@ -174,6 +221,9 @@ export default function MinesEvm() {
           <StatusBar>
             <div>
               <span> Mines: {mines} </span>
+              {houseBalance >= 0 && (
+                <span style={{ marginLeft: 10 }}>In-house: {formatUnits(houseBalance, tokenDecimals)}</span>
+              )}
               {totalGain > 0 && (
                 <span>
                   +{formatUnits(totalGain, tokenDecimals)}

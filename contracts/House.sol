@@ -18,6 +18,8 @@ contract House {
   IERC20 public immutable token;
   address public treasury;
   uint256 public feeBps; // e.g., 100 = 1%
+  // Per-player internal balances (deposit at Start, play many moves, withdraw on Finish)
+  mapping(address => uint256> public balances;
 
   modifier onlyOwner() { require(msg.sender == owner, "NOT_OWNER"); _; }
 
@@ -34,11 +36,30 @@ contract House {
   function setTreasury(address _treasury) external onlyOwner { require(_treasury != address(0), "ZERO"); treasury = _treasury; }
   function transferOwnership(address _owner) external onlyOwner { require(_owner != address(0), "ZERO"); owner = _owner; }
 
+  // Deposit RXCGT into internal balance (requires prior approve by user)
+  function deposit(uint256 amount) external {
+    require(amount > 0, "AMOUNT_ZERO");
+    require(token.transferFrom(msg.sender, address(this), amount), "TRANSFER_FROM_FAIL");
+    balances[msg.sender] += amount;
+  }
+
+  function withdraw(uint256 amount) public {
+    require(balances[msg.sender] >= amount, "INSUFFICIENT_BAL");
+    balances[msg.sender] -= amount;
+    require(token.transfer(msg.sender, amount), "WITHDRAW_FAIL");
+  }
+
+  function withdrawAll() external {
+    uint256 amt = balances[msg.sender];
+    withdraw(amt);
+  }
+
   // WARNING: This example uses pseudo randomness (NOT for production). Replace with VRF/commit-reveal for fairness.
   function play(uint256 gameId, uint256 wager, uint256[] calldata /* bet */, bytes calldata data) external returns (uint256 payout) {
     require(wager > 0, "WAGER_ZERO");
-    // Pull tokens
-    require(token.transferFrom(msg.sender, address(this), wager), "TRANSFER_FROM_FAIL");
+    // Use internal balance instead of transferFrom per click
+    require(balances[msg.sender] >= wager, "INSUFFICIENT_BAL");
+    balances[msg.sender] -= wager;
 
     // Pseudo outcome: 50/50 double or lose. Replace per-game math in your frontend (encode in `data`) or on-chain here.
     bool win = uint256(keccak256(abi.encodePacked(block.prevrandao, msg.sender, block.timestamp))) % 2 == 0;
@@ -48,8 +69,8 @@ contract House {
     uint256 net = payout - fee;
 
     if (payout > 0) {
-      require(token.transfer(msg.sender, net), "PAYOUT_FAIL");
-      // If treasury is the contract itself, skip self-transfer
+      // Credit winnings to internal balance; optionally route fee to treasury
+      balances[msg.sender] += net;
       if (fee > 0 && treasury != address(this)) require(token.transfer(treasury, fee), "FEE_FAIL");
     }
 
