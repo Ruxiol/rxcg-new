@@ -1,12 +1,16 @@
 import { BrowserProvider, Contract, JsonRpcProvider, Signer } from 'ethers'
 
 export const HOUSE_ABI = [
-  'event GamePlayed(address indexed player, uint256 gameId, uint256 wager, uint256 payout, bytes data)',
-  'function token() view returns (address)',
-  'function feeBps() view returns (uint256)',
+  'event GamePlayed(address indexed player, uint256 indexed gameId, uint256 wager, uint256 payout, bytes data)',
+  'function play(uint256 gameId, uint256 wager, uint256[] , bytes data) returns (uint256 payout)',
   'function setFeeBps(uint256 _feeBps)',
-  'function play(uint256 gameId, uint256 wager, uint256[] bet, bytes data) returns (uint256 payout)',
-  'function payout(address player, uint256 amount)'
+  'function setTreasury(address _treasury)',
+  'function sweep(address to, uint256 amount)',
+  'function transferOwnership(address _owner)',
+  'function feeBps() view returns (uint256)',
+  'function owner() view returns (address)',
+  'function token() view returns (address)',
+  'function treasury() view returns (address)'
 ]
 
 export function getHouseContract(address: string, signerOrProvider: Signer | BrowserProvider | JsonRpcProvider) {
