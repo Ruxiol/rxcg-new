@@ -7,6 +7,7 @@ export const HOUSE_ABI = [
   'function settleAndWithdraw(uint256 gameId, uint256[] wagers, bytes seed)',
   'function playBatchReveal(uint256 gameId, uint256[] wagers, bytes userSeed, bytes houseSeed) returns (uint256)',
   'function userCommit(bytes32 _userCommit)',
+  'function adminClearSession(address user)',
   'function deposit(uint256 amount)',
   'function withdraw(uint256 amount)',
     'function currentHouseCommit() view returns (bytes32)',
@@ -81,4 +82,14 @@ export async function ensureAllowance(
       throw e
     }
   }
+}
+
+export function randomBytes32(): `0x${string}` {
+  const bytes = new Uint8Array(32)
+  if (typeof crypto !== 'undefined' && (crypto as any).getRandomValues) {
+    (crypto as any).getRandomValues(bytes)
+  } else {
+    for (let i = 0; i < 32; i++) bytes[i] = Math.floor(Math.random() * 256)
+  }
+  return ('0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')) as `0x${string}`
 }

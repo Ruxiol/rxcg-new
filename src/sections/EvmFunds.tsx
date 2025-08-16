@@ -1,7 +1,8 @@
 import React from 'react'
 import { Modal } from '../components/Modal'
 import { useEvm } from '../evm/EvmProvider'
-import { getHouseContract, ensureAllowance, getHouseAddress } from '../evm/house'
+import { getHouseContract, ensureAllowance, getHouseAddress, ERC20_ABI } from '../evm/house'
+import { Contract } from 'ethers'
 import { formatUnits, parseUnits } from '../components/evm/format'
 
 export default function EvmFunds(props: { onClose: () => void }) {
@@ -33,15 +34,27 @@ export default function EvmFunds(props: { onClose: () => void }) {
       if (amt <= 0n) throw new Error('Enter amount')
       setLoading(true)
       const signer = await provider.getSigner()
+      // Ensure on correct chain (optional)
+      try { await (await provider).send('eth_chainId', []) } catch {}
+      // Check wallet token balance
+      try {
+        const erc20 = new Contract(tokenAddress, ERC20_ABI, signer)
+        const bal: bigint = await erc20.balanceOf(address)
+        if (bal < amt) throw new Error('Insufficient token balance for deposit')
+      } catch {}
   await ensureAllowance(tokenAddress, address, houseAddress, amt, signer)
       const house = getHouseContract(houseAddress, signer)
-      const tx = await house.deposit(amt)
+      // Estimate gas and add a buffer to avoid RPC generic errors
+      let gasLimit
+      try { const est: bigint = await (house as any).deposit.estimateGas(amt); gasLimit = (est * 120n) / 100n } catch {}
+      const tx = await (house as any).deposit(amt, gasLimit ? { gasLimit } : {})
       await tx.wait(2)
       setAmountIn('')
   await refresh()
   try { window.dispatchEvent(new CustomEvent('house-balance-updated')) } catch {}
     } catch (e: any) {
-      alert(e?.message || 'Deposit failed')
+      const msg = e?.reason || e?.data?.message || e?.message || 'Deposit failed'
+      alert(msg)
     } finally {
       setLoading(false)
     }
@@ -54,19 +67,24 @@ export default function EvmFunds(props: { onClose: () => void }) {
       const signer = await provider.getSigner()
       const house = getHouseContract(houseAddress, signer)
   if (all) {
-        const tx = await house.withdrawAll()
+        let gasLimit
+        try { const est: bigint = await (house as any).withdrawAll.estimateGas(); gasLimit = (est * 120n) / 100n } catch {}
+        const tx = await (house as any).withdrawAll(gasLimit ? { gasLimit } : {})
         await tx.wait(2)
       } else {
         const amt = parseUnits(amountOut || '0', tokenDecimals)
         if (amt <= 0n) throw new Error('Enter amount')
-        const tx = await house.withdraw(amt)
+        let gasLimit
+        try { const est: bigint = await (house as any).withdraw.estimateGas(amt); gasLimit = (est * 120n) / 100n } catch {}
+        const tx = await (house as any).withdraw(amt, gasLimit ? { gasLimit } : {})
         await tx.wait(2)
       }
   setAmountOut('')
   await refresh()
   try { window.dispatchEvent(new CustomEvent('house-balance-updated')) } catch {}
     } catch (e: any) {
-      alert(e?.message || 'Withdraw failed')
+      const msg = e?.reason || e?.data?.message || e?.message || 'Withdraw failed'
+      alert(msg)
     } finally {
       setLoading(false)
     }

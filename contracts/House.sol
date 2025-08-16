@@ -82,6 +82,12 @@ contract House {
     sessionHouseCommit[msg.sender] = currentHouseCommit;
   }
 
+  // Admin tool: clear a stuck user session (e.g., user lost seed or misconfig)
+  function adminClearSession(address user) external onlyOwner {
+    userCommitment[user] = bytes32(0);
+    sessionHouseCommit[user] = bytes32(0);
+  }
+
   // Deposit RXCGT into internal balance (requires prior approve by user)
   function deposit(uint256 amount) external {
     require(amount > 0, "AMOUNT_ZERO");
