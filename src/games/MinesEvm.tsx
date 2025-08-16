@@ -6,7 +6,7 @@ import { generateGrid, revealAllMines, revealGold } from './Mines/utils'
 import { useEvm } from '../evm/EvmProvider'
 import { formatUnits, parseUnits } from '../components/evm/format'
 import { getHouseContract, getHouseAddress } from '../evm/house'
-import { solidityPackedKeccak256, keccak256, hexlify, toUtf8Bytes } from 'ethers'
+import { solidityPackedKeccak256, keccak256, hexlify, toUtf8Bytes, AbiCoder } from 'ethers'
 import EvmFunds from '../sections/EvmFunds'
 import { Modal } from '../components/Modal'
 
@@ -31,6 +31,8 @@ export default function MinesEvm() {
   const movesRef = React.useRef<bigint[]>([])
   const [pendingSpent, setPendingSpent] = React.useState<bigint>(0n)
   const [busted, setBusted] = React.useState(false)
+  const [edgeBps, setEdgeBps] = React.useState<number>(0)
+  const [feeBps, setFeeBps] = React.useState<number>(0)
   const [showRecover, setShowRecover] = React.useState(false)
   const [recoverSeedInput, setRecoverSeedInput] = React.useState('')
 
@@ -63,6 +65,19 @@ export default function MinesEvm() {
   const canPlay = started && confirmed && !loading && !gameFinished && !busted
   const { wager, bet } = levels[currentLevel] ?? {}
 
+  const availableBalance = React.useMemo(() => houseBalance - pendingSpent, [houseBalance, pendingSpent])
+
+  const projectedPayout = React.useMemo(() => {
+    if (busted || currentLevel <= 0) return 0n
+    const base = levels[0]?.wager ?? 0n
+    if (base <= 0n) return 0n
+    const gross = base * BigInt(1 + currentLevel)
+    const afterEdge = (gross * BigInt(10000 - edgeBps)) / 10000n
+    const fee = (afterEdge * BigInt(feeBps)) / 10000n
+    const net = afterEdge - fee
+    return net
+  }, [busted, currentLevel, levels, edgeBps, feeBps])
+
   const refreshBalance = React.useCallback(async () => {
     try {
       const houseAddress = getHouseAddress()
@@ -87,6 +102,33 @@ export default function MinesEvm() {
     const id = setInterval(refreshBalance, 12000)
     return () => clearInterval(id)
   }, [refreshBalance])
+
+  // Fetch house edge/fee for accurate projections
+  React.useEffect(() => {
+    const run = async () => {
+      try {
+        const addr = getHouseAddress()
+        if (!addr) return
+        if (rpc) {
+          const house = getHouseContract(addr, rpc)
+          const e = await (house as any).houseEdgeBps()
+          const f = await (house as any).feeBps()
+          setEdgeBps(Number(e))
+          setFeeBps(Number(f))
+          return
+        }
+        if (provider) {
+          const signer = await provider.getSigner()
+          const house = getHouseContract(addr, signer)
+          const e = await (house as any).houseEdgeBps()
+          const f = await (house as any).feeBps()
+          setEdgeBps(Number(e))
+          setFeeBps(Number(f))
+        }
+      } catch {}
+    }
+    run()
+  }, [provider, rpc])
 
   // Refresh balance immediately when Funds modal performs a deposit/withdraw
   React.useEffect(() => {
@@ -256,7 +298,10 @@ export default function MinesEvm() {
       const houseSeedHex = envSeed
         ? (envSeed.startsWith('0x') ? envSeed : hexlify(toUtf8Bytes(envSeed)))
         : hexlify(toUtf8Bytes('house-seed'))
-      const hash = solidityPackedKeccak256(['bytes', 'bytes', 'address', 'uint256'], [seed, houseSeedHex, address, moveIndex])
+  // Contract uses keccak256(abi.encode(...)), so mirror that with AbiCoder
+  const coder = AbiCoder.defaultAbiCoder()
+  const encoded = coder.encode(['bytes', 'bytes', 'address', 'uint256'], [seed, houseSeedHex, address, moveIndex])
+  const hash = keccak256(encoded)
       const win = BigInt(hash) % 2n === 0n
   movesRef.current.push(initialWager)
   setPendingSpent((s) => s + initialWager)
@@ -330,13 +375,10 @@ export default function MinesEvm() {
         <StatusBar>
           <div>
             <span> Mines: {mines} </span>
-            {houseBalance >= 0 && (
-              <span style={{ marginLeft: 10 }}>In-house: {formatUnits(houseBalance - pendingSpent, tokenDecimals)}</span>
-            )}
-            {totalGain > 0 && (
-              <span>
-                +{formatUnits(totalGain, tokenDecimals)}
-              </span>
+            <span style={{ marginLeft: 10 }}>Available: {formatUnits(availableBalance, tokenDecimals)}</span>
+            <span style={{ marginLeft: 10, opacity: .8 }}>Locked: {formatUnits(pendingSpent, tokenDecimals)}</span>
+            {!busted && currentLevel > 0 && (
+              <span style={{ marginLeft: 10, color: '#9ad68a' }}>Projected: {formatUnits(projectedPayout, tokenDecimals)}</span>
             )}
           </div>
         </StatusBar>
