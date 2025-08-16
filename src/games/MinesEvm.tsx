@@ -8,6 +8,7 @@ import { formatUnits, parseUnits } from '../components/evm/format'
 import { getHouseContract, getHouseAddress } from '../evm/house'
 import { solidityPackedKeccak256, keccak256, hexlify, toUtf8Bytes } from 'ethers'
 import EvmFunds from '../sections/EvmFunds'
+import { Modal } from '../components/Modal'
 
 // Simple local RNG for demo; in production use verifiable randomness or on-chain logic
 function rng(seed: number) { return () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280 } }
@@ -30,6 +31,8 @@ export default function MinesEvm() {
   const movesRef = React.useRef<bigint[]>([])
   const [pendingSpent, setPendingSpent] = React.useState<bigint>(0n)
   const [busted, setBusted] = React.useState(false)
+  const [showRecover, setShowRecover] = React.useState(false)
+  const [recoverSeedInput, setRecoverSeedInput] = React.useState('')
 
   const [initialWagerInput, setInitialWagerInput] = React.useState('0.01')
   const tokenDecimals = Number(import.meta.env.VITE_BEP20_TOKEN_DECIMALS ?? 18)
@@ -149,7 +152,7 @@ export default function MinesEvm() {
             setConfirmed(false)
             return
           }
-          if (msg.includes('ACTIVE_SESSION')) {
+      if (msg.includes('ACTIVE_SESSION')) {
             // Reuse previously saved seed to continue the active session
             const key = address ? `mines-commit-seed:${address.toLowerCase()}` : undefined
             const saved = key ? localStorage.getItem(key) : null
@@ -159,7 +162,8 @@ export default function MinesEvm() {
               setConfirmed(true)
               return
             } else {
-              alert('A previous session is already active, but no seed is saved locally. Please finish the round from the device where it was started, or ask admin to reset.')
+        setShowRecover(true)
+        return
             }
           }
           console.error('userCommit failed', e)
@@ -285,6 +289,32 @@ export default function MinesEvm() {
   return (
     <div style={{ padding: 16 }}>
       <Container2>
+        {showRecover && (
+          <Modal onClose={() => setShowRecover(false)}>
+            <h3>Recover session</h3>
+            <p style={{ fontSize: 12, opacity: .8 }}>A round is already active for this account. Paste the user seed (0x…32 bytes) used when you clicked Start.</p>
+            <input
+              placeholder="0x..."
+              value={recoverSeedInput}
+              onChange={(e) => setRecoverSeedInput(e.target.value)}
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: '#111', color: '#fff', border: '1px solid #333', marginBottom: 8 }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => {
+                  const s = recoverSeedInput.trim()
+                  if (!s.startsWith('0x') || s.length < 4) return
+                  setSeed(s)
+                  setStarted(true)
+                  setConfirmed(true)
+                  setShowRecover(false)
+                }}
+                style={{ padding: '8px 12px', borderRadius: 6 }}
+              >Use seed</button>
+              <button onClick={() => setShowRecover(false)} style={{ padding: '8px 12px', borderRadius: 6 }}>Cancel</button>
+            </div>
+          </Modal>
+        )}
         <Levels>
           {levels.map(({ cumProfit }, i) => (
             <Level key={i} $active={currentLevel === i}>
