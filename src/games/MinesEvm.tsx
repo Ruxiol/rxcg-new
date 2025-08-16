@@ -250,9 +250,13 @@ export default function MinesEvm() {
       sounds.play('step', { })
       sounds.sounds.tick.player.loop = true
       sounds.play('tick', { })
-      // Local outcome using same rule as contract batch: win if keccak(seed, player, moveIndex) % 2 == 0
-  const moveIndex = movesRef.current.length
-      const hash = solidityPackedKeccak256(['bytes', 'address', 'uint256'], [seed, address, moveIndex])
+      // Local outcome must match contract: hash(userSeed, houseSeed, player, moveIndex)
+      const moveIndex = movesRef.current.length
+      const envSeed: string | undefined = (import.meta as any).env?.VITE_HOUSE_SEED
+      const houseSeedHex = envSeed
+        ? (envSeed.startsWith('0x') ? envSeed : hexlify(toUtf8Bytes(envSeed)))
+        : hexlify(toUtf8Bytes('house-seed'))
+      const hash = solidityPackedKeccak256(['bytes', 'bytes', 'address', 'uint256'], [seed, houseSeedHex, address, moveIndex])
       const win = BigInt(hash) % 2n === 0n
   movesRef.current.push(initialWager)
   setPendingSpent((s) => s + initialWager)
