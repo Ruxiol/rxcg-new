@@ -8,12 +8,13 @@ import LeaderboardsModal from '../sections/LeaderBoard/LeaderboardsModal'
 import { PLATFORM_JACKPOT_FEE, PLATFORM_CREATOR_ADDRESS } from '../constants'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import TokenSelect from './TokenSelect'
+import { formatUnits } from '../components/evm/format'
 // Removed Solana UserButton; using EVM connect only
 import EvmUserButton from './EvmUserButton'
 import EvmFunds from './EvmFunds'
 import AdminPanel from './AdminPanel'
 import { useEvm } from '../evm/EvmProvider'
-import { getHouseContract } from '../evm/house'
+import { getHouseContract, getHouseAddress } from '../evm/house'
 import { ENABLE_LEADERBOARD } from '../constants'
 
 const Bonus = styled.button`
@@ -63,18 +64,41 @@ export default function Header() {
   const [showAdmin, setShowAdmin] = React.useState(false)
   const { address, rpc } = useEvm()
   const [isOwner, setIsOwner] = React.useState(false)
+  const [houseBalance, setHouseBalance] = React.useState<bigint>(0n)
 
   React.useEffect(() => {
     const run = async () => {
       try {
         if (!rpc || !evmEnabled) return setIsOwner(false)
-  const house = getHouseContract(getHouseAddress(), rpc)
+        const house = getHouseContract(getHouseAddress(), rpc)
         const owner = await (house as any).owner()
         setIsOwner(Boolean(address && owner && address.toLowerCase() === String(owner).toLowerCase()))
       } catch { setIsOwner(false) }
     }
     run()
   }, [address, rpc, evmEnabled])
+
+  // In-house balance next to token
+  const refreshHouseBalance = React.useCallback(async () => {
+    try {
+      if (!rpc || !address || !evmEnabled) return
+      const house = getHouseContract(getHouseAddress(), rpc)
+      const bal: bigint = await (house as any).balances(address)
+      setHouseBalance(bal)
+    } catch {}
+  }, [address, rpc, evmEnabled])
+
+  React.useEffect(() => {
+    refreshHouseBalance()
+    const id = setInterval(refreshHouseBalance, 12000)
+    return () => clearInterval(id)
+  }, [refreshHouseBalance])
+
+  React.useEffect(() => {
+    const handler = () => refreshHouseBalance()
+    window.addEventListener('house-balance-updated', handler as any)
+    return () => window.removeEventListener('house-balance-updated', handler as any)
+  }, [refreshHouseBalance])
 
   return (
     <>
@@ -159,6 +183,12 @@ export default function Header() {
           )}
 
           <TokenSelect />
+          {evmEnabled && (
+            <div style={{ color: '#9ad68a', fontSize: 12, marginLeft: 6, background:'#1b2a1b', padding:'4px 8px', borderRadius:6 }}>
+              In-house: {formatUnits(houseBalance, Number(import.meta.env.VITE_BEP20_TOKEN_DECIMALS ?? 18))}
+              <span style={{ opacity: .7, marginLeft: 4 }}>{String(import.meta.env.VITE_BEP20_TOKEN_NAME || 'RXCGT')}</span>
+            </div>
+          )}
           {evmEnabled && (
             <button onClick={() => setShowAdmin(true)} style={{ padding: '6px 10px', borderRadius: 6 }}>
               Admin

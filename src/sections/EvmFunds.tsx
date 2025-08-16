@@ -74,7 +74,24 @@ export default function EvmFunds(props: { onClose: () => void }) {
 
   return (
     <Modal onClose={props.onClose}>
-      <h2>Funds</h2>
+      <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        Funds
+        {loading && (
+          <span
+            aria-label="loading"
+            style={{
+              width: 12,
+              height: 12,
+              border: '2px solid #ffffff22',
+              borderTopColor: '#fff',
+              borderRadius: '50%',
+              display: 'inline-block',
+              animation: 'spin 0.8s linear infinite'
+            }}
+          />
+        )}
+      </h2>
+      <style>{`@keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }`}</style>
       <div style={{ marginBottom: 8 }}>On-contract: {formatUnits(balance, tokenDecimals)}</div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
         <input

@@ -6,7 +6,7 @@ import { generateGrid, revealAllMines, revealGold } from './Mines/utils'
 import { useEvm } from '../evm/EvmProvider'
 import { formatUnits, parseUnits } from '../components/evm/format'
 import { getHouseContract, getHouseAddress } from '../evm/house'
-import { solidityPackedKeccak256, keccak256 } from 'ethers'
+import { solidityPackedKeccak256, keccak256, hexlify, toUtf8Bytes } from 'ethers'
 import EvmFunds from '../sections/EvmFunds'
 
 // Simple local RNG for demo; in production use verifiable randomness or on-chain logic
@@ -124,16 +124,16 @@ export default function MinesEvm() {
             alert('House commit not set yet. Ask admin to set a commit in Admin panel.')
             throw new Error('NO_HOUSE_COMMIT')
           }
-        } catch (e) {
-          console.warn('currentHouseCommit check skipped due to read error; will try userCommit directly', e)
-        }
-        const commitHash = keccak256(seedCandidate as any)
-        try {
-          // Save the active commit so we can verify the reveal seed matches it later
+          // Save active commit for this session so reveal can verify against it
           try {
             const commitKey = address ? `mines-session-house-commit:${address.toLowerCase()}` : undefined
             if (commitKey) localStorage.setItem(commitKey, String(active))
           } catch {}
+        } catch (e) {
+          console.warn('currentHouseCommit check skipped due to read error; will try userCommit directly', e)
+        }
+        const commitHash = keccak256(seedCandidate as any)
+  try {
           const tx = await (house as any).userCommit(commitHash)
           await tx.wait(1)
           // Persist committed seed per user so reveal matches even after reloads
@@ -182,16 +182,28 @@ export default function MinesEvm() {
         // Batch settle on-chain in one tx using the same seed and the per-click wagers
         const wagers = movesRef.current
         if (wagers.length > 0) {
-          // Reveal with mixed seeds. House seed must be the EXACT bytes used to compute the commit.
+          // Reveal with mixed seeds. Build house seed exactly like Admin did for commit.
           const envSeed: string | undefined = (import.meta as any).env?.VITE_HOUSE_SEED
           const houseSeedHex = envSeed
-            ? (envSeed.startsWith('0x') ? envSeed : (await import('ethers')).hexlify((await import('ethers')).toUtf8Bytes(envSeed)))
-            : (await import('ethers')).hexlify((await import('ethers')).toUtf8Bytes('house-seed'))
+            ? (envSeed.startsWith('0x') ? envSeed : hexlify(toUtf8Bytes(envSeed)))
+            : hexlify(toUtf8Bytes('house-seed'))
+          // Preflight: keccak256(houseSeedHex) must equal captured commit
+          try {
+            const commitKey = address ? `mines-session-house-commit:${address.toLowerCase()}` : undefined
+            const expected = commitKey ? localStorage.getItem(commitKey) : null
+            const computed = keccak256(houseSeedHex as any)
+            if (expected && expected.toLowerCase() !== computed.toLowerCase()) {
+              alert('House commit mismatch: VITE_HOUSE_SEED does not match active commit (or commit rotated). Start a new round after syncing seed/commit.')
+              return
+            }
+          } catch {}
           const tx1 = await (house as any).playBatchReveal(1, wagers, seed, houseSeedHex)
           await tx1.wait()
           // Clear persisted seed after successful settle
           const key = address ? `mines-commit-seed:${address.toLowerCase()}` : undefined
           if (key) localStorage.removeItem(key)
+          const commitKey = address ? `mines-session-house-commit:${address.toLowerCase()}` : undefined
+          if (commitKey) localStorage.removeItem(commitKey)
         }
         movesRef.current = []
         setSeed('0x')
